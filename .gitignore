@@ -1,0 +1,16 @@
+# compiled binary (make build)
+/azpim
+/azpim.exe
+
+# release artifacts (make release)
+/dist/
+
+# test binaries and coverage
+*.test
+coverage.out
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
