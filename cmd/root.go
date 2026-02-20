@@ -40,7 +40,8 @@ Authentication uses DefaultAzureCredential — run 'az login' before using this 
 }
 
 // Execute is the entry point called from main.
-func Execute() {
+func Execute(version string) {
+	rootCmd.Version = version
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -59,7 +60,7 @@ func addScopeFlags(cmd *cobra.Command, flags *scopeFlags) {
 	cmd.Flags().StringVar(&flags.Scope, "scope", "", "Full ARM scope (overrides other scope flags)")
 	cmd.Flags().StringVarP(&flags.ManagementGroup, "management-group", "m", "", `Management group ID (use "/" for tenant root group)`)
 	cmd.Flags().StringVar(&flags.TenantID, "tenant-id", os.Getenv("AZURE_TENANT_ID"), "Azure tenant ID (auto-detected from credentials if omitted)")
-	cmd.Flags().StringVarP(&flags.Subscription, "subscription", "s", os.Getenv("AZURE_SUBSCRIPTION_ID"), "Subscription ID")
+	cmd.Flags().StringVarP(&flags.Subscription, "subscription", "s", os.Getenv("AZURE_SUBSCRIPTION_ID"), "Subscription ID or name")
 	cmd.Flags().StringVarP(&flags.ResourceGroup, "resource-group", "g", "", "Resource group name (requires --subscription)")
 }
 
@@ -84,6 +85,13 @@ func resolveScope(ctx context.Context, cred azcore.TokenCredential, flags scopeF
 //     groups in parallel, matching the Azure Portal "My roles" behavior.
 func resolveScopes(ctx context.Context, clients *pim.Clients, cred azcore.TokenCredential, flags scopeFlags) ([]string, error) {
 	if flags.Scope != "" || flags.ManagementGroup != "" || flags.Subscription != "" {
+		if flags.Subscription != "" {
+			id, err := clients.ResolveSubscriptionID(ctx, flags.Subscription)
+			if err != nil {
+				return nil, err
+			}
+			flags.Subscription = id
+		}
 		scope, err := resolveScope(ctx, cred, flags)
 		if err != nil {
 			return nil, err

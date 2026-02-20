@@ -3,12 +3,36 @@ package pim
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/managementgroups/armmanagementgroups"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
 )
+
+var subscriptionIDRe = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+
+// ResolveSubscriptionID returns a subscription ID for the given value.
+// If nameOrID already looks like a UUID it is returned unchanged.
+// Otherwise all accessible subscriptions are listed and the first one whose
+// display name matches (case-insensitive) is returned.
+func (c *Clients) ResolveSubscriptionID(ctx context.Context, nameOrID string) (string, error) {
+	if subscriptionIDRe.MatchString(nameOrID) {
+		return nameOrID, nil
+	}
+	entries, err := c.listSubscriptionEntries(ctx)
+	if err != nil {
+		return "", fmt.Errorf("list subscriptions: %w", err)
+	}
+	lower := strings.ToLower(nameOrID)
+	for _, e := range entries {
+		if strings.ToLower(e.displayName) == lower {
+			return strings.TrimPrefix(e.scope, "/subscriptions/"), nil
+		}
+	}
+	return "", fmt.Errorf("no subscription found with name %q", nameOrID)
+}
 
 // scopeEntry pairs an ARM scope string with its human-readable display name.
 type scopeEntry struct {
