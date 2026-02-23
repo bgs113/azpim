@@ -9,23 +9,29 @@ A CLI tool for managing Azure Privileged Identity Management (PIM) role assignme
 
 ## Installation
 
+Releases are distributed as ZIP files hosted on SharePoint. SharePoint requires authentication, so command-line tools like `curl` or `wget` won't work — **download the ZIP using your web browser**.
+
 ### macOS
 
-Download the binary for your architecture:
+Download the ZIP for your architecture from SharePoint:
 
-| Architecture  | Binary               |
-| ------------- | -------------------- |
-| Apple Silicon | `azpim-darwin-arm64` |
-| Intel         | `azpim-darwin-amd64` |
+| Architecture  | File                            |
+| ------------- | ------------------------------- |
+| Apple Silicon | `azpim-vX.Y.Z-darwin-arm64.zip` |
+| Intel         | `azpim-vX.Y.Z-darwin-amd64.zip` |
+
+Unzip and install (replace the filename with the version you downloaded):
 
 ```bash
 # Apple Silicon
-curl -Lo azpim https://github.com/yourorg/azpim/releases/latest/download/azpim-darwin-arm64
-install -m 755 azpim ~/.local/bin/azpim
+unzip azpim-vX.Y.Z-darwin-arm64.zip
+mkdir -p ~/.local/bin
+install -m 755 azpim-vX.Y.Z-darwin-arm64 ~/.local/bin/azpim
 
 # Intel
-curl -Lo azpim https://github.com/yourorg/azpim/releases/latest/download/azpim-darwin-amd64
-install -m 755 azpim ~/.local/bin/azpim
+unzip azpim-vX.Y.Z-darwin-amd64.zip
+mkdir -p ~/.local/bin
+install -m 755 azpim-vX.Y.Z-darwin-amd64 ~/.local/bin/azpim
 ```
 
 Ensure `~/.local/bin` is on your PATH (add to `~/.zshrc` if needed):
@@ -35,7 +41,7 @@ echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-> **Gatekeeper prompt**: If you download the binary through a browser (e.g. from the GitHub releases page), macOS will stamp it with a quarantine attribute and block it on first run. The `curl` method above avoids this. If you do download via browser, go to **System Settings → Privacy & Security** and click **Allow Anyway**, or clear the attribute manually:
+> **Gatekeeper prompt**: Because the binary was downloaded via a browser, macOS stamps it with a quarantine attribute and will block it on first run. Go to **System Settings → Privacy & Security** and click **Allow Anyway**, or clear the attribute from the terminal:
 >
 > ```bash
 > xattr -dr com.apple.quarantine ~/.local/bin/azpim
@@ -43,10 +49,12 @@ source ~/.zshrc
 
 ### Linux
 
+Download `azpim-vX.Y.Z-linux-amd64.zip` from SharePoint. Unzip and install (replace the filename with the version you downloaded):
+
 ```bash
-curl -Lo azpim https://github.com/yourorg/azpim/releases/latest/download/azpim-linux-amd64
+unzip azpim-vX.Y.Z-linux-amd64.zip
 mkdir -p ~/.local/bin
-install -m 755 azpim ~/.local/bin/azpim
+install -m 755 azpim-vX.Y.Z-linux-amd64 ~/.local/bin/azpim
 ```
 
 Ensure `~/.local/bin` is on your PATH (add to `~/.bashrc` if needed):
@@ -58,7 +66,16 @@ source ~/.bashrc
 
 ### Windows
 
-Download `azpim-windows-amd64.exe` from the [releases page](https://github.com/yourorg/azpim/releases/latest) and rename it to `azpim.exe`.
+Download `azpim-vX.Y.Z-windows-amd64.zip` from SharePoint.
+
+Extract the ZIP — in File Explorer: right-click → **Extract All**, or in PowerShell (replace the filename with the version you downloaded):
+
+```powershell
+Expand-Archive -Path azpim-vX.Y.Z-windows-amd64.zip -DestinationPath .
+Rename-Item .\azpim-vX.Y.Z-windows-amd64.exe azpim.exe
+```
+
+> **SmartScreen warning**: Windows may block the executable because it is not code-signed. If you see a "Windows protected your PC" dialog, click **More info → Run anyway**.
 
 **Option A — Add to a directory already on your PATH:**
 
@@ -141,7 +158,7 @@ make release
 
 Produces versioned zipped binaries in `dist/`:
 
-```
+```text
 dist/azpim-v0.2.0-darwin-arm64.zip
 dist/azpim-v0.2.0-darwin-amd64.zip
 dist/azpim-v0.2.0-linux-amd64.zip

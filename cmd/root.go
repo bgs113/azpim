@@ -2,8 +2,10 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"azpim/internal/auth"
 	"azpim/internal/pim"
@@ -36,16 +38,70 @@ It supports listing eligible and active role assignments, and activating or
 deactivating roles at management group, subscription, or resource group scope.
 
 Authentication uses DefaultAzureCredential — run 'az login' before using this tool.`,
-	SilenceUsage: true,
+	SilenceUsage:  true,
+	SilenceErrors: true,
 }
 
 // Execute is the entry point called from main.
 func Execute(version string) {
 	rootCmd.Version = version
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, "Error:", friendlyError(err))
 		os.Exit(1)
 	}
+}
+
+// friendlyError returns a concise, user-readable version of err.
+// Auth errors from DefaultAzureCredential are collapsed to a one-liner, and
+// verbose Azure ARM API HTTP dumps are trimmed to just the error code.
+func friendlyError(err error) string {
+	msg := err.Error()
+
+	// Auth failures from the Azure SDK credential chain.
+	if strings.Contains(msg, "DefaultAzureCredential") {
+		if strings.Contains(msg, "expired") || strings.Contains(msg, "AADSTS50173") {
+			return "Azure credentials have expired — run 'az login' to re-authenticate"
+		}
+		return "Azure authentication failed — run 'az login' to sign in"
+	}
+
+	// ARM API errors: strip the verbose multi-line HTTP dump and show one line.
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		// The SDK appends ": {METHOD} https://..." before the dump. Strip from there.
+		for _, method := range []string{"GET", "PUT", "POST", "DELETE", "PATCH"} {
+			if i := strings.Index(msg, ": "+method+" https://"); i >= 0 {
+				msg = msg[:i]
+				break
+			}
+		}
+		return msg + ": " + armCodeDesc(respErr.ErrorCode, respErr.StatusCode)
+	}
+
+	return msg
+}
+
+// armCodeDesc maps known ARM error codes to short descriptions,
+// falling back to "{code} (HTTP {status})" for unrecognised codes.
+func armCodeDesc(code string, status int) string {
+	switch code {
+	case "RoleAssignmentExists", "RoleAssignmentAlreadyExists":
+		return "role is already active"
+	case "RoleAssignmentScheduleRequestExists":
+		return "an activation request for this role is already pending"
+	case "RoleEligibilityDoesNotExist":
+		return "no eligible assignment found at this scope"
+	case "PendingApproval", "PendingAdminDecision":
+		return "role requires admin approval before it can be activated"
+	case "AuthorizationFailed":
+		return "permission denied"
+	case "InvalidScope":
+		return "invalid scope"
+	}
+	if code != "" {
+		return fmt.Sprintf("%s (HTTP %d)", code, status)
+	}
+	return fmt.Sprintf("HTTP %d", status)
 }
 
 func init() {
