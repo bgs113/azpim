@@ -2,14 +2,80 @@ package pim
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/managementgroups/armmanagementgroups"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
 )
+
+const scopeCacheTTL = 5 * time.Minute
+
+type scopeCacheFile struct {
+	FetchedAt time.Time        `json:"fetched_at"`
+	Entries   []scopeEntryJSON `json:"entries"`
+}
+
+type scopeEntryJSON struct {
+	Scope       string `json:"scope"`
+	DisplayName string `json:"display_name"`
+}
+
+func scopeCachePath() (string, error) {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "azpim", "scopes.json"), nil
+}
+
+func loadScopeCache() ([]scopeEntry, bool) {
+	path, err := scopeCachePath()
+	if err != nil {
+		return nil, false
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var cf scopeCacheFile
+	if err := json.Unmarshal(data, &cf); err != nil {
+		return nil, false
+	}
+	if time.Since(cf.FetchedAt) > scopeCacheTTL {
+		return nil, false
+	}
+	entries := make([]scopeEntry, len(cf.Entries))
+	for i, e := range cf.Entries {
+		entries[i] = scopeEntry{scope: e.Scope, displayName: e.DisplayName}
+	}
+	return entries, true
+}
+
+func saveScopeCache(entries []scopeEntry) {
+	path, err := scopeCachePath()
+	if err != nil {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return
+	}
+	je := make([]scopeEntryJSON, len(entries))
+	for i, e := range entries {
+		je[i] = scopeEntryJSON{Scope: e.scope, DisplayName: e.displayName}
+	}
+	data, err := json.Marshal(scopeCacheFile{FetchedAt: time.Now(), Entries: je})
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0600)
+}
 
 var subscriptionIDRe = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
@@ -41,13 +107,28 @@ type scopeEntry struct {
 }
 
 // ListAccessibleScopes returns ARM scope strings for all subscriptions and
-// management groups the current principal can enumerate. Management group
-// listing is best-effort: failures (e.g. 403) are silently ignored, since many
-// orgs restrict that endpoint but users still have subscription-level PIM roles.
+// management groups the current principal can enumerate. Results are cached on
+// disk for 5 minutes to avoid redundant API calls on every invocation.
+//
+// Management group listing is best-effort: failures (e.g. 403) are silently
+// ignored, since many orgs restrict that endpoint but users still have
+// subscription-level PIM roles.
 //
 // Display names discovered during enumeration are stored in scopeNameCache so
 // that subsequent calls to ResolveScopeName need not make extra API calls.
 func (c *Clients) ListAccessibleScopes(ctx context.Context) ([]string, error) {
+	// Serve from disk cache if fresh.
+	if cached, ok := loadScopeCache(); ok {
+		for _, e := range cached {
+			c.scopeNameSet(e.scope, e.displayName)
+		}
+		scopes := make([]string, len(cached))
+		for i, e := range cached {
+			scopes[i] = e.scope
+		}
+		return scopes, nil
+	}
+
 	type result struct {
 		entries []scopeEntry
 		err     error
@@ -85,6 +166,8 @@ func (c *Clients) ListAccessibleScopes(ctx context.Context) ([]string, error) {
 	if len(all) == 0 {
 		return nil, fmt.Errorf("no accessible subscriptions or management groups found — ensure you are logged in (az login)")
 	}
+
+	saveScopeCache(all)
 
 	scopes := make([]string, len(all))
 	for i, e := range all {

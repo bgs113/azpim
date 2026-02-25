@@ -68,7 +68,8 @@ source ~/.bashrc
 
 Download `azpim-vX.Y.Z-windows-amd64.zip` from SharePoint.
 
-Extract the ZIP — in File Explorer: right-click → **Extract All**, or in PowerShell (replace the filename with the version you downloaded):
+Extract the ZIP — in File Explorer: right-click → **Extract All**, or in PowerShell
+(replace the filename with the version you downloaded):
 
 ```powershell
 Expand-Archive -Path azpim-vX.Y.Z-windows-amd64.zip -DestinationPath .
@@ -77,21 +78,28 @@ Rename-Item .\azpim-vX.Y.Z-windows-amd64.exe azpim.exe
 
 > **SmartScreen warning**: Windows may block the executable because it is not code-signed. If you see a "Windows protected your PC" dialog, click **More info → Run anyway**.
 
-**Option A — Add to a directory already on your PATH:**
+**Install to a per-user bin directory (recommended)**
+
+This installs azpim for your user only and does not require admin rights.
 
 ```powershell
-Move-Item azpim.exe C:\Windows\System32\azpim.exe
-```
-
-**Option B — Add a new directory to your PATH (no admin required):**
-
-```powershell
+# Create a per-user bin directory if it doesn't exist
 New-Item -ItemType Directory -Force -Path "$HOME\bin"
-Move-Item azpim.exe "$HOME\bin\azpim.exe"
-[Environment]::SetEnvironmentVariable("Path", "$HOME\bin;" + $env:Path, "User")
+
+# Move the binary into place (overwrite-in-place on updates)
+Move-Item -Force azpim.exe "$HOME\bin\azpim.exe"
+
+# Add the directory to your user PATH (one-time setup)
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  "$HOME\bin;" + [Environment]::GetEnvironmentVariable("Path", "User"),
+  "User"
+)
 ```
 
 Restart your terminal after updating PATH.
+
+After this, you can update azpim by simply replacing `$HOME\bin\azpim.exe` with a newer version.
 
 ### Verify installation
 
@@ -113,18 +121,18 @@ Or if you built from source:
 make uninstall
 ```
 
-**Windows Option A** (System32, requires admin):
-
-```powershell
-Remove-Item C:\Windows\System32\azpim.exe
-```
-
-**Windows Option B** (`$HOME\bin`):
+**Windows** (`$HOME\bin`):
 
 ```powershell
 Remove-Item "$HOME\bin\azpim.exe"
-# Optionally remove $HOME\bin from PATH if nothing else uses it:
-[Environment]::SetEnvironmentVariable("Path", ($env:Path -split ";" | Where-Object { $_ -ne "$HOME\bin" }) -join ";", "User")
+
+# Optionally remove $HOME\bin from PATH if nothing else uses it
+[Environment]::SetEnvironmentVariable(
+  "Path",
+  ([Environment]::GetEnvironmentVariable("Path", "User") -split ";" |
+    Where-Object { $_ -ne "$HOME\bin" }) -join ";",
+  "User"
+)
 ```
 
 ---
@@ -132,11 +140,6 @@ Remove-Item "$HOME\bin\azpim.exe"
 ## Building from source
 
 Requires [Go 1.22+](https://go.dev/dl/).
-
-```bash
-git clone https://github.com/yourorg/azpim.git
-cd azpim
-```
 
 **Build for the current platform:**
 
@@ -275,13 +278,14 @@ azpim activate \
 
 **Flags:**
 
-| Flag                         | Description                                                                                     |
-| ---------------------------- | ----------------------------------------------------------------------------------------------- |
-| `--role <name>`              | Role name to activate (interactive list if omitted)                                             |
-| `-d, --duration <hours>`     | Activation duration in hours, e.g. `4` or `4h` (prompts if omitted; defaults to policy maximum) |
-| `-j, --justification <text>` | Justification text (prompts if omitted)                                                         |
-| `--ticket-number <num>`      | Ticket or incident number                                                                       |
-| `--ticket-system <url>`      | Ticket system URL                                                                               |
+| Flag                         | Description                                                                                                           |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `--role <name>`              | Role name to activate (interactive list if omitted; prompts for scope if the name matches multiple entries)           |
+| `-d, --duration <value>`     | Duration as integer hours (`4`), or duration string (`4h30m`, `90m`) — prompts if omitted; defaults to policy maximum |
+| `-j, --justification <text>` | Justification text (prompts if omitted)                                                                               |
+| `--ticket-number <num>`      | Ticket or incident number                                                                                             |
+| `--ticket-system <url>`      | Ticket system URL                                                                                                     |
+| `-o, --output table\|json`   | Output format (default: `table`)                                                                                      |
 
 The duration prompt defaults to the **maximum allowed by the role's management policy** and validates that the requested duration does not exceed it.
 
@@ -304,10 +308,39 @@ azpim deactivate --all
 
 **Flags:**
 
-| Flag            | Description                                            |
-| --------------- | ------------------------------------------------------ |
-| `--role <name>` | Role name to deactivate (interactive list if omitted)  |
-| `--all`         | Deactivate all active roles (prompts for confirmation) |
+| Flag                       | Description                                                                   |
+| -------------------------- | ----------------------------------------------------------------------------- |
+| `--role <name>`            | Role name to deactivate (interactive list if omitted; disambiguates by scope) |
+| `--all`                    | Deactivate all active roles (prompts for confirmation)                        |
+| `-y, --yes`                | Skip confirmation prompt when used with `--all`                               |
+| `-o, --output table\|json` | Output format (default: `table`)                                              |
+
+---
+
+### `azpim extend` — Extend an active role
+
+Request an extension of an active (time-bound) PIM role assignment. The extension sets a new duration from the current time. Whether it is auto-approved or requires admin approval depends on the role's management policy.
+
+If `--role` or `--justification` are omitted, interactive prompts appear.
+
+```bash
+# Interactive selection
+azpim extend
+
+# Specify role and new duration
+azpim extend --subscription <id> --role "Contributor" --duration 4h
+```
+
+**Flags:**
+
+| Flag                         | Description                                                                                  |
+| ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `--role <name>`              | Role name to extend (interactive list if omitted; disambiguates by scope)                    |
+| `-d, --duration <value>`     | New duration from now, e.g. `4h` or `4h30m` — prompts if omitted; defaults to policy maximum |
+| `-j, --justification <text>` | Justification text (prompts if omitted)                                                      |
+| `--ticket-number <num>`      | Ticket or incident number                                                                    |
+| `--ticket-system <url>`      | Ticket system URL                                                                            |
+| `-o, --output table\|json`   | Output format (default: `table`)                                                             |
 
 ---
 

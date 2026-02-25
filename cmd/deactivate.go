@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
+	"time"
 
 	"azpim/internal/auth"
 	"azpim/internal/pim"
@@ -12,9 +15,11 @@ import (
 )
 
 var (
-	deactivateScope scopeFlags
-	deactivateRole  string
-	deactivateAll   bool
+	deactivateScope        scopeFlags
+	deactivateRole         string
+	deactivateAll          bool
+	deactivateYes          bool
+	deactivateOutputFormat string
 )
 
 var deactivateCmd = &cobra.Command{
@@ -26,7 +31,8 @@ If --role is omitted, an interactive list of active assignments is presented.
 
 Examples:
   azpim deactivate                                           # interactive, all scopes
-  azpim deactivate --subscription <id> --role "Contributor"`,
+  azpim deactivate --subscription <id> --role "Contributor"
+  azpim deactivate --all --yes                               # deactivate all without prompting`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cred, err := auth.NewCredential()
 		if err != nil {
@@ -59,17 +65,21 @@ Examples:
 		}
 
 		if deactivateAll {
-			fmt.Fprintln(os.Stdout, "Active roles to be deactivated:")
+			fmt.Fprintln(os.Stderr, "Active roles to be deactivated:")
 			for _, a := range active {
-				fmt.Fprintf(os.Stdout, "  • %-40s  %s  (%s remaining)\n", a.RoleName, a.Resource, a.TimeRemaining(false))
+				fmt.Fprintf(os.Stderr, "  • %-40s  %s  (%s remaining)\n", a.RoleName, a.Resource, a.TimeRemaining(false))
 			}
-			fmt.Fprintf(os.Stdout, "Deactivate all %d role(s)? [y/N] ", len(active))
-			var answer string
-			fmt.Fscanln(os.Stdin, &answer) // #nosec G104 -- EOF/error leaves answer empty, handled by != "y" check below
-			if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-				fmt.Fprintln(os.Stdout, "No roles deactivated.")
-				return nil
+			if !deactivateYes {
+				fmt.Fprintf(os.Stderr, "Deactivate all %d role(s)? [y/N] ", len(active))
+				var answer string
+				fmt.Fscanln(os.Stdin, &answer) // #nosec G104
+				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+					fmt.Fprintln(os.Stderr, "No roles deactivated.")
+					return nil
+				}
 			}
+			now := time.Now()
+			var deactivated []pim.ActiveAssignment
 			var failed []string
 			for _, a := range active {
 				fmt.Fprintf(os.Stderr, "Deactivating %q...\n", a.RoleName)
@@ -82,7 +92,15 @@ Examples:
 					failed = append(failed, a.RoleName)
 					continue
 				}
-				fmt.Fprintf(os.Stdout, "✓ Role %q deactivated\n", a.RoleName)
+				deactivated = append(deactivated, a)
+				if deactivateOutputFormat != "json" {
+					fmt.Fprintf(os.Stdout, "✓ Role %q deactivated\n", a.RoleName)
+				}
+			}
+			if deactivateOutputFormat == "json" {
+				if err := printDeactivateAllJSON(os.Stdout, deactivated, now); err != nil {
+					return err
+				}
 			}
 			if len(failed) > 0 {
 				return fmt.Errorf("failed to deactivate: %s", strings.Join(failed, ", "))
@@ -103,6 +121,11 @@ Examples:
 		}); err != nil {
 			return err
 		}
+
+		now := time.Now()
+		if deactivateOutputFormat == "json" {
+			return printDeactivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.Resource, now)
+		}
 		fmt.Fprintf(os.Stdout, "✓ Role %q deactivated successfully\n", selected.RoleName)
 		return nil
 	},
@@ -111,33 +134,55 @@ Examples:
 func init() {
 	addScopeFlags(deactivateCmd, &deactivateScope)
 	deactivateCmd.Flags().StringVar(&deactivateRole, "role", "", "Role name to deactivate (interactive if omitted)")
-	deactivateCmd.Flags().BoolVar(&deactivateAll, "all", false, "Deactivate all active roles (prompts for confirmation)")
+	deactivateCmd.Flags().BoolVar(&deactivateAll, "all", false, "Deactivate all active roles (prompts for confirmation unless --yes)")
+	deactivateCmd.Flags().BoolVarP(&deactivateYes, "yes", "y", false, "Skip confirmation prompt when used with --all")
+	deactivateCmd.Flags().StringVarP(&deactivateOutputFormat, "output", "o", "table", `Output format: "table" or "json"`)
 }
 
-// selectActive returns the matching active assignment, prompting interactively
-// if roleFlag is empty.
+// selectActive returns the matching active assignment. If roleFlag matches
+// multiple assignments at different scopes, the user is prompted to disambiguate.
 func selectActive(active []pim.ActiveAssignment, roleFlag string) (pim.ActiveAssignment, error) {
 	if roleFlag != "" {
-		for _, a := range active {
-			if strings.EqualFold(a.RoleName, roleFlag) {
-				return a, nil
-			}
+		matches := matchActive(active, roleFlag)
+		if len(matches) == 0 {
+			return pim.ActiveAssignment{}, fmt.Errorf("no active role matching %q found", roleFlag)
 		}
-		for _, a := range active {
-			if strings.HasPrefix(strings.ToLower(a.RoleName), strings.ToLower(roleFlag)) {
-				return a, nil
-			}
+		if len(matches) == 1 {
+			return matches[0], nil
 		}
-		return pim.ActiveAssignment{}, fmt.Errorf("no active role matching %q found", roleFlag)
+		return pickActive(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag))
 	}
+	return pickActive(active, "Select active role to deactivate")
+}
 
+func matchActive(active []pim.ActiveAssignment, roleFlag string) []pim.ActiveAssignment {
+	// Exact match first.
+	var exact []pim.ActiveAssignment
+	for _, a := range active {
+		if strings.EqualFold(a.RoleName, roleFlag) {
+			exact = append(exact, a)
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	// Prefix match fallback.
+	var prefix []pim.ActiveAssignment
+	for _, a := range active {
+		if strings.HasPrefix(strings.ToLower(a.RoleName), strings.ToLower(roleFlag)) {
+			prefix = append(prefix, a)
+		}
+	}
+	return prefix
+}
+
+func pickActive(active []pim.ActiveAssignment, label string) (pim.ActiveAssignment, error) {
 	labels := make([]string, len(active))
 	for i, a := range active {
 		labels[i] = fmt.Sprintf("%-40s  %s  (%s remaining)", a.RoleName, a.Resource, a.TimeRemaining(false))
 	}
-
 	prompt := promptui.Select{
-		Label: "Select active role to deactivate",
+		Label: label,
 		Items: labels,
 		Size:  15,
 	}
@@ -146,4 +191,41 @@ func selectActive(active []pim.ActiveAssignment, roleFlag string) (pim.ActiveAss
 		return pim.ActiveAssignment{}, fmt.Errorf("selection cancelled")
 	}
 	return active[idx], nil
+}
+
+type deactivateResult struct {
+	RoleName      string `json:"role_name"`
+	RoleDefID     string `json:"role_definition_id"`
+	Scope         string `json:"scope"`
+	ScopeDisplay  string `json:"scope_display"`
+	DeactivatedAt string `json:"deactivated_at"`
+}
+
+func printDeactivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, now time.Time) error {
+	r := deactivateResult{
+		RoleName:      roleName,
+		RoleDefID:     roleDefID,
+		Scope:         scope,
+		ScopeDisplay:  scopeDisplay,
+		DeactivatedAt: now.UTC().Format(time.RFC3339),
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(r)
+}
+
+func printDeactivateAllJSON(w io.Writer, roles []pim.ActiveAssignment, now time.Time) error {
+	results := make([]deactivateResult, len(roles))
+	for i, a := range roles {
+		results[i] = deactivateResult{
+			RoleName:      a.RoleName,
+			RoleDefID:     a.RoleDefID,
+			Scope:         a.Scope,
+			ScopeDisplay:  a.Resource,
+			DeactivatedAt: now.UTC().Format(time.RFC3339),
+		}
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(results)
 }

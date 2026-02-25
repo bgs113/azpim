@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"strings"
@@ -21,6 +23,7 @@ var (
 	activateJustification string
 	activateTicketNumber  string
 	activateTicketSystem  string
+	activateOutputFormat  string
 )
 
 var activateCmd = &cobra.Command{
@@ -30,7 +33,8 @@ var activateCmd = &cobra.Command{
 
 If --role or --justification are omitted, interactive prompts will appear.
 
-Duration: integer hours, e.g. 4 (defaults to the maximum allowed by the role policy).
+Duration: integer hours (e.g. 4), or duration string (e.g. 4h30m, 90m).
+Defaults to the maximum allowed by the role policy.
 
 Examples:
   azpim activate                                                              # interactive, all scopes
@@ -80,17 +84,11 @@ Examples:
 		}
 
 		justification := activateJustification
-		for justification == "" {
-			prompt := promptui.Prompt{Label: "Justification"}
-			val, err := prompt.Run()
+		if justification == "" {
+			justification, err = promptJustification()
 			if err != nil {
-				return fmt.Errorf("prompt cancelled")
+				return err
 			}
-			if strings.TrimSpace(val) == "" {
-				fmt.Fprintln(os.Stderr, "  Justification is required")
-				continue
-			}
-			justification = val
 		}
 
 		principalID, err := auth.ResolvePrincipalID(ctx, cred)
@@ -101,7 +99,7 @@ Examples:
 		opts := pim.ActivateOptions{
 			RoleDefID:     selected.RoleDefID,
 			PrincipalID:   principalID,
-			Scope:         selected.Scope, // activate at the assignment's own scope
+			Scope:         selected.Scope,
 			Duration:      dur,
 			Justification: justification,
 			TicketNumber:  activateTicketNumber,
@@ -112,6 +110,11 @@ Examples:
 		if err := clients.Activate(ctx, opts); err != nil {
 			return err
 		}
+
+		now := time.Now()
+		if activateOutputFormat == "json" {
+			return printActivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.ScopeDisplay, dur, now)
+		}
 		fmt.Fprintf(os.Stdout, "✓ Role %q activated for %s at %q\n", selected.RoleName, pim.FormatDuration(dur), selected.ScopeDisplay)
 		return nil
 	},
@@ -120,36 +123,57 @@ Examples:
 func init() {
 	addScopeFlags(activateCmd, &activateScope)
 	activateCmd.Flags().StringVar(&activateRole, "role", "", "Role name to activate (interactive if omitted)")
-	activateCmd.Flags().StringVarP(&activateDuration, "duration", "d", "", "Activation duration in hours, e.g. 4 or 4h (prompts if omitted)")
+	activateCmd.Flags().StringVarP(&activateDuration, "duration", "d", "", "Activation duration, e.g. 4 or 4h or 4h30m (prompts if omitted)")
 	activateCmd.Flags().StringVarP(&activateJustification, "justification", "j", "", "Justification text (prompts if omitted)")
 	activateCmd.Flags().StringVar(&activateTicketNumber, "ticket-number", "", "Ticket/incident number")
 	activateCmd.Flags().StringVar(&activateTicketSystem, "ticket-system", "", "Ticket system URL")
+	activateCmd.Flags().StringVarP(&activateOutputFormat, "output", "o", "table", `Output format: "table" or "json"`)
 }
 
-// selectEligible returns the matching eligible assignment, prompting the user
-// to choose one interactively if roleFlag is empty or matches multiple.
+// selectEligible returns the matching eligible assignment. If roleFlag matches
+// multiple assignments at different scopes, the user is prompted to disambiguate.
 func selectEligible(eligible []pim.EligibleAssignment, roleFlag string) (pim.EligibleAssignment, error) {
 	if roleFlag != "" {
-		for _, a := range eligible {
-			if strings.EqualFold(a.RoleName, roleFlag) {
-				return a, nil
-			}
+		matches := matchEligible(eligible, roleFlag)
+		if len(matches) == 0 {
+			return pim.EligibleAssignment{}, fmt.Errorf("no eligible role matching %q found", roleFlag)
 		}
-		for _, a := range eligible {
-			if strings.HasPrefix(strings.ToLower(a.RoleName), strings.ToLower(roleFlag)) {
-				return a, nil
-			}
+		if len(matches) == 1 {
+			return matches[0], nil
 		}
-		return pim.EligibleAssignment{}, fmt.Errorf("no eligible role matching %q found", roleFlag)
+		return pickEligible(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag))
 	}
+	return pickEligible(eligible, "Select eligible role to activate")
+}
 
+func matchEligible(eligible []pim.EligibleAssignment, roleFlag string) []pim.EligibleAssignment {
+	// Exact match first.
+	var exact []pim.EligibleAssignment
+	for _, a := range eligible {
+		if strings.EqualFold(a.RoleName, roleFlag) {
+			exact = append(exact, a)
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	// Prefix match fallback.
+	var prefix []pim.EligibleAssignment
+	for _, a := range eligible {
+		if strings.HasPrefix(strings.ToLower(a.RoleName), strings.ToLower(roleFlag)) {
+			prefix = append(prefix, a)
+		}
+	}
+	return prefix
+}
+
+func pickEligible(eligible []pim.EligibleAssignment, label string) (pim.EligibleAssignment, error) {
 	labels := make([]string, len(eligible))
 	for i, a := range eligible {
 		labels[i] = fmt.Sprintf("%-40s  %s", a.RoleName, a.ScopeDisplay)
 	}
-
 	prompt := promptui.Select{
-		Label: "Select eligible role to activate",
+		Label: label,
 		Items: labels,
 		Size:  15,
 	}
@@ -160,45 +184,41 @@ func selectEligible(eligible []pim.EligibleAssignment, roleFlag string) (pim.Eli
 	return eligible[idx], nil
 }
 
-// resolveDuration parses the --duration flag or prompts the user for an integer
-// number of hours. maxDur is the policy-enforced maximum; 0 means unknown.
+// resolveDuration parses the --duration flag or prompts the user.
+// Accepts an integer (hours) or a Go duration string (e.g. 4h30m, 90m).
 func resolveDuration(flag string, maxDur time.Duration) (time.Duration, error) {
-	maxHours := int(maxDur.Hours())
-
 	if flag != "" {
-		// Accept plain integer (hours) or Go duration string.
-		var d time.Duration
-		if h, err := strconv.Atoi(strings.TrimSpace(flag)); err == nil {
-			d = time.Duration(h) * time.Hour
-		} else if parsed, err := time.ParseDuration(flag); err == nil {
-			d = parsed
-		} else {
-			return 0, fmt.Errorf("invalid duration %q: use hours as integer (e.g. 4) or Go duration (e.g. 4h)", flag)
+		d, err := parseDurationInput(flag)
+		if err != nil {
+			return 0, fmt.Errorf("invalid duration %q: use integer hours (e.g. 4) or duration string (e.g. 4h30m, 90m)", flag)
 		}
 		if d <= 0 {
 			return 0, fmt.Errorf("duration must be positive")
 		}
-		if maxHours > 0 && d > time.Duration(maxHours)*time.Hour {
-			return 0, fmt.Errorf("duration exceeds maximum allowed by policy (%dh)", maxHours)
+		if maxDur > 0 && d > maxDur {
+			return 0, fmt.Errorf("duration exceeds maximum allowed by policy (%s)", pim.FormatDuration(maxDur))
 		}
 		return d, nil
 	}
 
-	defaultStr := "1"
-	if maxHours > 0 {
-		defaultStr = strconv.Itoa(maxHours)
+	defaultStr := "1h"
+	if maxDur > 0 {
+		defaultStr = pim.FormatDuration(maxDur)
 	}
 
 	prompt := promptui.Prompt{
-		Label:   fmt.Sprintf("Duration (hours) [%s]", defaultStr),
+		Label:   fmt.Sprintf("Duration [%s]", defaultStr),
 		Default: defaultStr,
 		Validate: func(s string) error {
-			h, err := strconv.Atoi(strings.TrimSpace(s))
-			if err != nil || h <= 0 {
-				return fmt.Errorf("enter a positive whole number of hours")
+			d, err := parseDurationInput(strings.TrimSpace(s))
+			if err != nil {
+				return fmt.Errorf("use integer hours (e.g. 4) or duration string (e.g. 4h30m, 90m)")
 			}
-			if maxHours > 0 && h > maxHours {
-				return fmt.Errorf("exceeds maximum %dh", maxHours)
+			if d <= 0 {
+				return fmt.Errorf("duration must be positive")
+			}
+			if maxDur > 0 && d > maxDur {
+				return fmt.Errorf("exceeds maximum %s", pim.FormatDuration(maxDur))
 			}
 			return nil
 		},
@@ -207,6 +227,60 @@ func resolveDuration(flag string, maxDur time.Duration) (time.Duration, error) {
 	if err != nil {
 		return 0, fmt.Errorf("prompt cancelled")
 	}
-	h, _ := strconv.Atoi(strings.TrimSpace(val))
-	return time.Duration(h) * time.Hour, nil
+	d, err := parseDurationInput(strings.TrimSpace(val))
+	if err != nil {
+		return 0, fmt.Errorf("parse duration %q: %w", val, err)
+	}
+	return d, nil
+}
+
+// parseDurationInput accepts an integer (treated as hours) or a Go duration string.
+func parseDurationInput(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if h, err := strconv.Atoi(s); err == nil {
+		return time.Duration(h) * time.Hour, nil
+	}
+	return time.ParseDuration(s)
+}
+
+// promptJustification prompts interactively for a non-empty justification string.
+func promptJustification() (string, error) {
+	for {
+		prompt := promptui.Prompt{Label: "Justification"}
+		val, err := prompt.Run()
+		if err != nil {
+			return "", fmt.Errorf("prompt cancelled")
+		}
+		if strings.TrimSpace(val) != "" {
+			return val, nil
+		}
+		fmt.Fprintln(os.Stderr, "  Justification is required")
+	}
+}
+
+type activateResult struct {
+	RoleName        string `json:"role_name"`
+	RoleDefID       string `json:"role_definition_id"`
+	Scope           string `json:"scope"`
+	ScopeDisplay    string `json:"scope_display"`
+	Duration        string `json:"duration"`
+	DurationSeconds int64  `json:"duration_seconds"`
+	ActivatedAt     string `json:"activated_at"`
+	ExpiresAt       string `json:"expires_at"`
+}
+
+func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now time.Time) error {
+	r := activateResult{
+		RoleName:        roleName,
+		RoleDefID:       roleDefID,
+		Scope:           scope,
+		ScopeDisplay:    scopeDisplay,
+		Duration:        pim.FormatDuration(dur),
+		DurationSeconds: int64(dur.Seconds()),
+		ActivatedAt:     now.UTC().Format(time.RFC3339),
+		ExpiresAt:       now.Add(dur).UTC().Format(time.RFC3339),
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(r)
 }

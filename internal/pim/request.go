@@ -30,10 +30,10 @@ func (c *Clients) Activate(ctx context.Context, opts ActivateOptions) error {
 
 	req := armauthorization.RoleAssignmentScheduleRequest{
 		Properties: &armauthorization.RoleAssignmentScheduleRequestProperties{
-			RoleDefinitionID:            &opts.RoleDefID,
-			PrincipalID:                 &opts.PrincipalID,
-			RequestType:                 &reqType,
-			ScheduleInfo:                &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfo{
+			RoleDefinitionID: &opts.RoleDefID,
+			PrincipalID:      &opts.PrincipalID,
+			RequestType:      &reqType,
+			ScheduleInfo: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfo{
 				Expiration: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfoExpiration{
 					Duration: &iso,
 					Type:     ptrExpirationTypeAfterDuration(),
@@ -84,14 +84,67 @@ func (c *Clients) Deactivate(ctx context.Context, opts DeactivateOptions) error 
 	return nil
 }
 
-// durationToISO8601 converts a Go duration to ISO 8601 duration string (PT#H#M).
+// ExtendOptions controls a SelfExtend PIM request.
+type ExtendOptions struct {
+	RoleDefID     string // full ARM role definition ID
+	PrincipalID   string // object ID of the requesting principal
+	Scope         string // ARM scope
+	Duration      time.Duration
+	Justification string
+	TicketNumber  string
+	TicketSystem  string
+}
+
+// Extend creates a SelfExtend role assignment schedule request, setting a new
+// duration from the current time on an already-active assignment.
+func (c *Clients) Extend(ctx context.Context, opts ExtendOptions) error {
+	reqName := uuid.New().String()
+
+	iso := durationToISO8601(opts.Duration)
+	reqType := armauthorization.RequestTypeSelfExtend
+	justification := opts.Justification
+
+	req := armauthorization.RoleAssignmentScheduleRequest{
+		Properties: &armauthorization.RoleAssignmentScheduleRequestProperties{
+			RoleDefinitionID: &opts.RoleDefID,
+			PrincipalID:      &opts.PrincipalID,
+			RequestType:      &reqType,
+			ScheduleInfo: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfo{
+				Expiration: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfoExpiration{
+					Duration: &iso,
+					Type:     ptrExpirationTypeAfterDuration(),
+				},
+			},
+			Justification: &justification,
+		},
+	}
+
+	if opts.TicketNumber != "" || opts.TicketSystem != "" {
+		req.Properties.TicketInfo = &armauthorization.RoleAssignmentScheduleRequestPropertiesTicketInfo{
+			TicketNumber: &opts.TicketNumber,
+			TicketSystem: &opts.TicketSystem,
+		}
+	}
+
+	_, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
+	if err != nil {
+		return fmt.Errorf("extend role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
+	}
+	return nil
+}
+
+// durationToISO8601 converts a Go duration to an ISO 8601 duration string.
 func durationToISO8601(d time.Duration) string {
 	h := int(d.Hours())
 	m := int(d.Minutes()) % 60
-	if m == 0 {
+	switch {
+	case h == 0:
+		return fmt.Sprintf("PT%dM", m)
+	case m == 0:
 		return fmt.Sprintf("PT%dH", h)
+	default:
+		return fmt.Sprintf("PT%dH%dM", h, m)
 	}
-	return fmt.Sprintf("PT%dH%dM", h, m)
 }
 
 func ptrExpirationTypeAfterDuration() *armauthorization.Type {

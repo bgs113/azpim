@@ -38,16 +38,8 @@ func ResolveTokenClaim(ctx context.Context, cred azcore.TokenCredential, claim s
 	}
 
 	seg := parts[1]
-	switch len(seg) % 4 {
-	case 2:
-		seg += "=="
-	case 3:
-		seg += "="
-	}
-	seg = strings.ReplaceAll(seg, "-", "+")
-	seg = strings.ReplaceAll(seg, "_", "/")
 
-	payload, err := base64.StdEncoding.DecodeString(seg)
+	payload, err := base64.RawURLEncoding.DecodeString(seg)
 	if err != nil {
 		return "", fmt.Errorf("decode token payload: %w", err)
 	}
