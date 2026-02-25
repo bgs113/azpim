@@ -38,6 +38,7 @@ Scope examples:
 		if err != nil {
 			return err
 		}
+		defer clients.SaveRoleDefCache()
 
 		scopes, err := resolveScopes(ctx, clients, cred, eligibleScope)
 		if err != nil {

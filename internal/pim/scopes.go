@@ -9,10 +9,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/managementgroups/armmanagementgroups"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
 )
 
 const scopeCacheTTL = 5 * time.Minute
@@ -177,12 +173,8 @@ func (c *Clients) ListAccessibleScopes(ctx context.Context) ([]string, error) {
 }
 
 func (c *Clients) listSubscriptionEntries(ctx context.Context) ([]scopeEntry, error) {
-	client, err := armsubscriptions.NewClient(c.cred, &arm.ClientOptions{})
-	if err != nil {
-		return nil, err
-	}
 	var entries []scopeEntry
-	pager := client.NewListPager(nil)
+	pager := c.Subscriptions.NewListPager(nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -204,12 +196,8 @@ func (c *Clients) listSubscriptionEntries(ctx context.Context) ([]scopeEntry, er
 }
 
 func (c *Clients) listManagementGroupEntries(ctx context.Context) ([]scopeEntry, error) {
-	client, err := armmanagementgroups.NewClient(c.cred, &arm.ClientOptions{})
-	if err != nil {
-		return nil, err
-	}
 	var entries []scopeEntry
-	pager := client.NewListPager(nil)
+	pager := c.ManagementGroups.NewListPager(nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -252,12 +240,9 @@ func (c *Clients) fetchScopeName(ctx context.Context, scope string) string {
 		if slash := strings.Index(mgID, "/"); slash >= 0 {
 			mgID = mgID[:slash]
 		}
-		mgClient, err := armmanagementgroups.NewClient(c.cred, &arm.ClientOptions{})
-		if err == nil {
-			resp, err := mgClient.Get(ctx, mgID, nil)
-			if err == nil && resp.Properties != nil && resp.Properties.DisplayName != nil && *resp.Properties.DisplayName != "" {
-				return *resp.Properties.DisplayName
-			}
+		resp, err := c.ManagementGroups.Get(ctx, mgID, nil)
+		if err == nil && resp.Properties != nil && resp.Properties.DisplayName != nil && *resp.Properties.DisplayName != "" {
+			return *resp.Properties.DisplayName
 		}
 	}
 
@@ -269,12 +254,9 @@ func (c *Clients) fetchScopeName(ctx context.Context, scope string) string {
 		rest := after
 		if !strings.Contains(rest, "/") {
 			// Pure subscription scope — look up display name.
-			subClient, err := armsubscriptions.NewClient(c.cred, &arm.ClientOptions{})
-			if err == nil {
-				resp, err := subClient.Get(ctx, rest, nil)
-				if err == nil && resp.DisplayName != nil && *resp.DisplayName != "" {
-					return *resp.DisplayName
-				}
+			resp, err := c.Subscriptions.Get(ctx, rest, nil)
+			if err == nil && resp.DisplayName != nil && *resp.DisplayName != "" {
+				return *resp.DisplayName
 			}
 		}
 	}

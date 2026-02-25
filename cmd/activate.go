@@ -50,6 +50,7 @@ Examples:
 		if err != nil {
 			return err
 		}
+		defer clients.SaveRoleDefCache()
 
 		scopes, err := resolveScopes(ctx, clients, cred, activateScope)
 		if err != nil {

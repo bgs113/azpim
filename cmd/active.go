@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	activeScope          scopeFlags
-	activeOutput         outputFlags
+	activeScope            scopeFlags
+	activeOutput           outputFlags
 	activeIncludePermanent bool
 )
 
@@ -40,6 +40,7 @@ Scope examples:
 		if err != nil {
 			return err
 		}
+		defer clients.SaveRoleDefCache()
 
 		scopes, err := resolveScopes(ctx, clients, cred, activeScope)
 		if err != nil {

@@ -9,20 +9,32 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v3"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/managementgroups/armmanagementgroups"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
+	"golang.org/x/sync/singleflight"
 )
+
+// roleDefGetter is the subset of [*armauthorization.RoleDefinitionsClient] used
+// for role name resolution. Extracted as an interface to allow test injection.
+type roleDefGetter interface {
+	Get(ctx context.Context, scope string, roleDefinitionID string, options *armauthorization.RoleDefinitionsClientGetOptions) (armauthorization.RoleDefinitionsClientGetResponse, error)
+}
 
 // Clients bundles the ARM authorization clients needed for PIM operations.
 type Clients struct {
 	EligibleInstances *armauthorization.RoleEligibilityScheduleInstancesClient
 	ActiveInstances   *armauthorization.RoleAssignmentScheduleInstancesClient
 	Requests          *armauthorization.RoleAssignmentScheduleRequestsClient
-	RoleDefinitions   *armauthorization.RoleDefinitionsClient
+	RoleDefinitions   roleDefGetter
 	PolicyAssignments *armauthorization.RoleManagementPolicyAssignmentsClient
 	Policies          *armauthorization.RoleManagementPoliciesClient
+	Subscriptions     *armsubscriptions.Client
+	ManagementGroups  *armmanagementgroups.Client
 	cred              azcore.TokenCredential
-	mu             sync.Mutex
+	mu                sync.Mutex
+	roleDefFlight     singleflight.Group
 	// roleDefCache caches role definition display names keyed by their full ARM ID.
-	roleDefCache   map[string]string
+	roleDefCache map[string]string
 	// scopeNameCache caches human-readable display names keyed by ARM scope string.
 	scopeNameCache map[string]string
 }
@@ -62,6 +74,16 @@ func NewClients(cred azcore.TokenCredential) (*Clients, error) {
 		return nil, fmt.Errorf("create policies client: %w", err)
 	}
 
+	subscriptions, err := armsubscriptions.NewClient(cred, &opts)
+	if err != nil {
+		return nil, fmt.Errorf("create subscriptions client: %w", err)
+	}
+
+	managementGroups, err := armmanagementgroups.NewClient(cred, &opts)
+	if err != nil {
+		return nil, fmt.Errorf("create management groups client: %w", err)
+	}
+
 	return &Clients{
 		EligibleInstances: eligible,
 		ActiveInstances:   active,
@@ -69,9 +91,18 @@ func NewClients(cred azcore.TokenCredential) (*Clients, error) {
 		RoleDefinitions:   roleDefs,
 		PolicyAssignments: policyAssignments,
 		Policies:          policies,
+		Subscriptions:     subscriptions,
+		ManagementGroups:  managementGroups,
 		cred:              cred,
-		roleDefCache:      make(map[string]string),
-		scopeNameCache:    make(map[string]string),
+		roleDefCache: func() map[string]string {
+			if path, err := roleDefCachePath(); err == nil {
+				if loaded := loadRoleDefDiskCache(path); loaded != nil {
+					return loaded
+				}
+			}
+			return make(map[string]string)
+		}(),
+		scopeNameCache: make(map[string]string),
 	}, nil
 }
 
@@ -99,16 +130,40 @@ func (c *Clients) ResolveRoleName(ctx context.Context, roleDefID string) string 
 	}
 	guid := parts[1]
 
-	resp, err := c.RoleDefinitions.Get(ctx, scope, guid, nil)
-	name := guid // fallback to GUID
-	if err == nil && resp.Properties != nil && resp.Properties.RoleName != nil && *resp.Properties.RoleName != "" {
-		name = *resp.Properties.RoleName
-	}
+	val, _, _ := c.roleDefFlight.Do(roleDefID, func() (any, error) {
+		resp, err := c.RoleDefinitions.Get(ctx, scope, guid, nil)
+		name := guid // fallback to GUID on error
+		if err == nil && resp.Properties != nil && resp.Properties.RoleName != nil && *resp.Properties.RoleName != "" {
+			name = *resp.Properties.RoleName
+		}
+		c.mu.Lock()
+		c.roleDefCache[roleDefID] = name
+		c.mu.Unlock()
+		return name, nil
+	})
+	return val.(string)
+}
 
+// saveRoleDefCacheTo flushes the current in-memory role definition name cache
+// to the given path. Used internally and by tests.
+func (c *Clients) saveRoleDefCacheTo(path string) {
 	c.mu.Lock()
-	c.roleDefCache[roleDefID] = name
+	m := make(map[string]string, len(c.roleDefCache))
+	for k, v := range c.roleDefCache {
+		m[k] = v
+	}
 	c.mu.Unlock()
-	return name
+	saveRoleDefDiskCache(path, m)
+}
+
+// SaveRoleDefCache flushes the in-memory role definition name cache to disk.
+// Call via defer immediately after NewClients succeeds.
+func (c *Clients) SaveRoleDefCache() {
+	path, err := roleDefCachePath()
+	if err != nil {
+		return
+	}
+	c.saveRoleDefCacheTo(path)
 }
 
 // scopeNameGet reads the scope name cache with the lock held.

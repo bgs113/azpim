@@ -18,9 +18,9 @@ func TestParseISO8601Duration(t *testing.T) {
 		{"PT8H30M", 8*time.Hour + 30*time.Minute, false},
 		{"PT1H30M", time.Hour + 30*time.Minute, false},
 		{"P1D", 24 * time.Hour, false},
-		{"invalid", 0, true},  // no P prefix
-		{"8H", 0, true},       // no P prefix
-		{"PTXH", 0, true},     // non-numeric
+		{"invalid", 0, true}, // no P prefix
+		{"8H", 0, true},      // no P prefix
+		{"PTXH", 0, true},    // non-numeric
 	}
 	for _, tt := range tests {
 		got, err := parseISO8601Duration(tt.input)
