@@ -110,6 +110,7 @@ func init() {
 	rootCmd.AddCommand(activateCmd)
 	rootCmd.AddCommand(deactivateCmd)
 	rootCmd.AddCommand(extendCmd)
+	rootCmd.AddCommand(requestsCmd)
 }
 
 // addScopeFlags registers the shared scope flags on a command.

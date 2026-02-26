@@ -84,6 +84,50 @@ func PrintActiveJSON(w io.Writer, assignments []pim.ActiveAssignment, humanReada
 	return printJSON(w, out)
 }
 
+type requestJSON struct {
+	RequestName   string `json:"request_name"`
+	RoleName      string `json:"role_name"`
+	Scope         string `json:"scope"`
+	ScopeDisplay  string `json:"scope_display"`
+	ResourceType  string `json:"resource_type"`
+	RequestType   string `json:"request_type"`
+	Status        string `json:"status"`
+	Justification string `json:"justification,omitempty"`
+	RequestedAt   string `json:"requested_at,omitempty"`
+	ExpiresAt     string `json:"expires_at,omitempty"`
+	RoleDefID     string `json:"role_definition_id"`
+}
+
+// PrintRequestsJSON writes schedule requests as a JSON array to w.
+// If pendingOnly is true, only requests with status "Pending" are included.
+func PrintRequestsJSON(w io.Writer, requests []pim.ScheduleRequestEntry, pendingOnly bool) error {
+	out := make([]requestJSON, 0, len(requests))
+	for _, r := range requests {
+		if pendingOnly && !r.IsPending() {
+			continue
+		}
+		j := requestJSON{
+			RequestName:   r.RequestName,
+			RoleName:      r.RoleName,
+			Scope:         r.Scope,
+			ScopeDisplay:  r.ScopeDisplay,
+			ResourceType:  r.ResourceType,
+			RequestType:   r.RequestType,
+			Status:        r.Status,
+			Justification: r.Justification,
+			RoleDefID:     r.RoleDefID,
+		}
+		if r.HasRequestedAt && !r.RequestedAt.IsZero() {
+			j.RequestedAt = r.RequestedAt.UTC().Format(time.RFC3339)
+		}
+		if r.HasExpiry && !r.ExpiresAt.IsZero() {
+			j.ExpiresAt = r.ExpiresAt.UTC().Format(time.RFC3339)
+		}
+		out = append(out, j)
+	}
+	return printJSON(w, out)
+}
+
 func printJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

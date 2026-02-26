@@ -156,6 +156,76 @@ func PrintActiveTable(w io.Writer, assignments []pim.ActiveAssignment, humanRead
 	}
 }
 
+// PrintRequestsTable writes schedule requests as an aligned table to w.
+// If pendingOnly is true, only requests with status "Pending" are shown.
+func PrintRequestsTable(w io.Writer, requests []pim.ScheduleRequestEntry, pendingOnly bool) {
+	var rows []pim.ScheduleRequestEntry
+	for _, r := range requests {
+		if pendingOnly && !r.IsPending() {
+			continue
+		}
+		rows = append(rows, r)
+	}
+
+	if len(rows) == 0 {
+		if pendingOnly {
+			fmt.Fprintln(w, "No pending requests found.")
+		} else {
+			fmt.Fprintln(w, "No requests found.")
+		}
+		return
+	}
+
+	t := tablewriter.NewTable(w,
+		tablewriter.WithRenderer(renderer.NewBlueprint(borderlessRendition())),
+		tablewriter.WithHeaderAlignment(tw.AlignLeft),
+		tablewriter.WithRowAlignment(tw.AlignLeft),
+	)
+	t.Header("ROLE", "SCOPE", "TYPE", "STATUS", "REQUESTED", "EXPIRES", "JUSTIFICATION")
+
+	for _, r := range rows {
+		requested := "-"
+		if r.HasRequestedAt {
+			requested = formatTime(r.RequestedAt)
+		}
+		expires := "-"
+		if r.HasExpiry {
+			expires = formatTime(r.ExpiresAt)
+		}
+		just := truncate(r.Justification, 40)
+		if just == "" {
+			just = "-"
+		}
+		if err := t.Append([]string{
+			r.RoleName,
+			r.ScopeDisplay,
+			r.RequestType,
+			requestStatusColor(r.Status),
+			requested,
+			expires,
+			just,
+		}); err != nil {
+			fmt.Fprintf(w, "error appending row: %v\n", err)
+		}
+	}
+	if err := t.Render(); err != nil {
+		fmt.Fprintf(w, "error rendering table: %v\n", err)
+	}
+}
+
+func requestStatusColor(status string) string {
+	switch strings.ToLower(status) {
+	case "active":
+		return colorize(status, colorGreen)
+	case "pending":
+		return colorize(status, colorYellow)
+	case "denied", "failed":
+		return colorize(status, colorRed)
+	default:
+		return status
+	}
+}
+
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return "-"

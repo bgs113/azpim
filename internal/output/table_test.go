@@ -77,6 +77,63 @@ func TestPrintActiveTableEmpty(t *testing.T) {
 	}
 }
 
+func TestPrintRequestsTableEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	PrintRequestsTable(&buf, nil, false)
+	if !strings.Contains(buf.String(), "No requests found.") {
+		t.Errorf("expected empty message, got: %q", buf.String())
+	}
+}
+
+func TestPrintRequestsTablePendingEmpty(t *testing.T) {
+	var buf bytes.Buffer
+	// One Active request; with pendingOnly=true, should show empty message.
+	requests := []pim.ScheduleRequestEntry{
+		{RoleName: "Contributor", ScopeDisplay: "My Sub", RequestType: "Activate", Status: "Active"},
+	}
+	PrintRequestsTable(&buf, requests, true)
+	if !strings.Contains(buf.String(), "No pending requests found.") {
+		t.Errorf("expected pending-empty message, got: %q", buf.String())
+	}
+}
+
+func TestPrintRequestsTableRow(t *testing.T) {
+	var buf bytes.Buffer
+	requests := []pim.ScheduleRequestEntry{
+		{
+			RoleName:     "Owner",
+			ScopeDisplay: "my-subscription",
+			RequestType:  "Activate",
+			Status:       "Pending",
+			Justification: "incident response",
+		},
+	}
+	PrintRequestsTable(&buf, requests, false)
+	out := buf.String()
+	if !strings.Contains(out, "Owner") {
+		t.Errorf("expected role name in output, got: %q", out)
+	}
+	if !strings.Contains(out, "Activate") {
+		t.Errorf("expected request type in output, got: %q", out)
+	}
+}
+
+func TestPrintRequestsTablePendingFilter(t *testing.T) {
+	var buf bytes.Buffer
+	requests := []pim.ScheduleRequestEntry{
+		{RoleName: "Owner", RequestType: "Activate", Status: "Pending"},
+		{RoleName: "Contributor", RequestType: "Activate", Status: "Active"},
+	}
+	PrintRequestsTable(&buf, requests, true)
+	out := buf.String()
+	if !strings.Contains(out, "Owner") {
+		t.Errorf("expected pending role in output, got: %q", out)
+	}
+	if strings.Contains(out, "Contributor") {
+		t.Errorf("expected active role to be filtered out, got: %q", out)
+	}
+}
+
 func TestPrintActiveTableRow(t *testing.T) {
 	var buf bytes.Buffer
 	assignments := []pim.ActiveAssignment{
