@@ -108,15 +108,20 @@ Examples:
 		}
 
 		fmt.Fprintf(os.Stderr, "Activating %q for %s...\n", selected.RoleName, pim.FormatDuration(dur))
-		if err := clients.Activate(ctx, opts); err != nil {
+		outcome, err := clients.Activate(ctx, opts)
+		if err != nil {
 			return err
 		}
 
 		now := time.Now()
 		if activateOutputFormat == "json" {
-			return printActivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.ScopeDisplay, dur, now)
+			return printActivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.ScopeDisplay, dur, now, outcome.Pending)
 		}
-		fmt.Fprintf(os.Stdout, "✓ Role %q activated for %s at %q\n", selected.RoleName, pim.FormatDuration(dur), selected.ScopeDisplay)
+		if outcome.Pending {
+			fmt.Fprintf(os.Stdout, "Activation request submitted for %q — pending admin approval\n", selected.RoleName)
+		} else {
+			fmt.Fprintf(os.Stdout, "✓ Role %q activated for %s at %q\n", selected.RoleName, pim.FormatDuration(dur), selected.ScopeDisplay)
+		}
 		return nil
 	},
 }
@@ -268,9 +273,14 @@ type activateResult struct {
 	DurationSeconds int64  `json:"duration_seconds"`
 	ActivatedAt     string `json:"activated_at"`
 	ExpiresAt       string `json:"expires_at"`
+	Status          string `json:"status"`
 }
 
-func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now time.Time) error {
+func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now time.Time, pending bool) error {
+	status := "Active"
+	if pending {
+		status = "PendingApproval"
+	}
 	r := activateResult{
 		RoleName:        roleName,
 		RoleDefID:       roleDefID,
@@ -280,6 +290,7 @@ func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay str
 		DurationSeconds: int64(dur.Seconds()),
 		ActivatedAt:     now.UTC().Format(time.RFC3339),
 		ExpiresAt:       now.Add(dur).UTC().Format(time.RFC3339),
+		Status:          status,
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")

@@ -20,8 +20,15 @@ type ActivateOptions struct {
 	TicketSystem  string
 }
 
+// ActivationOutcome describes the result of a SelfActivate request.
+type ActivationOutcome struct {
+	// Pending is true when the role's policy requires admin approval and the
+	// activation has not yet been granted.
+	Pending bool
+}
+
 // Activate creates a SelfActivate role assignment schedule request.
-func (c *Clients) Activate(ctx context.Context, opts ActivateOptions) error {
+func (c *Clients) Activate(ctx context.Context, opts ActivateOptions) (ActivationOutcome, error) {
 	reqName := uuid.New().String()
 
 	iso := durationToISO8601(opts.Duration)
@@ -50,11 +57,23 @@ func (c *Clients) Activate(ctx context.Context, opts ActivateOptions) error {
 		}
 	}
 
-	_, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
+	resp, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
 	if err != nil {
-		return fmt.Errorf("activate role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
+		return ActivationOutcome{}, fmt.Errorf("activate role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
 	}
-	return nil
+
+	var pending bool
+	if resp.Properties != nil && resp.Properties.Status != nil {
+		switch *resp.Properties.Status {
+		case armauthorization.StatusPendingApproval,
+			armauthorization.StatusPendingApprovalProvisioning,
+			armauthorization.StatusPendingEvaluation,
+			armauthorization.StatusPendingProvisioning,
+			armauthorization.StatusPendingScheduleCreation:
+			pending = true
+		}
+	}
+	return ActivationOutcome{Pending: pending}, nil
 }
 
 // DeactivateOptions controls a SelfDeactivate PIM request.
