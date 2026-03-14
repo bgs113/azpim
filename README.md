@@ -78,7 +78,7 @@ Rename-Item .\azpim-vX.Y.Z-windows-amd64.exe azpim.exe
 
 > **SmartScreen warning**: Windows may block the executable because it is not code-signed. If you see a "Windows protected your PC" dialog, click **More info → Run anyway**.
 
-**Install to a per-user bin directory (recommended)**
+#### Install to a per-user bin directory (recommended)
 
 This installs azpim for your user only and does not require admin rights.
 
@@ -134,6 +134,45 @@ Remove-Item "$HOME\bin\azpim.exe"
   "User"
 )
 ```
+
+### Docker
+
+`azpim` is available as a container image built on [Chainguard](https://cgr.dev) hardened base images (distroless, nonroot, near-zero CVEs).
+
+**Build the image:**
+
+```bash
+make docker-build
+```
+
+**Run using your existing `az login` session** (mounts Azure CLI credentials and cache from the host):
+
+```bash
+make docker-run CMD="eligible"
+make docker-run CMD="active --human"
+make docker-run CMD="activate --subscription 00000000-0000-0000-0000-000000000000 --role Contributor --duration 4 --justification 'Incident response'"
+```
+
+Or invoke `docker run` directly (note the nonroot home directory path):
+
+```bash
+docker run --rm -it \
+  -v ~/.azure:/home/nonroot/.azure:ro \
+  -v ~/.cache/azpim:/home/nonroot/.cache/azpim \
+  azpim:latest eligible
+```
+
+**Run using a service principal** (environment variable auth — no volume mount needed):
+
+```bash
+docker run --rm -it \
+  -e AZURE_TENANT_ID=<tenant-id> \
+  -e AZURE_CLIENT_ID=<client-id> \
+  -e AZURE_CLIENT_SECRET=<client-secret> \
+  azpim:latest eligible
+```
+
+> **Interactive prompts:** Commands that show interactive selection menus (e.g. `azpim activate` without `--role`) require a TTY, which `docker run -it` provides. Fully flag-specified commands work without `-t`.
 
 ---
 
@@ -371,4 +410,10 @@ azpim deactivate --all
 
 # Export active roles as JSON
 azpim active --output json | jq '.[].role_name'
+
+# Same workflows via Docker
+make docker-run CMD="eligible"
+make docker-run CMD="active --human"
+make docker-run CMD="activate --subscription 00000000-0000-0000-0000-000000000000 --role Owner --duration 2 --justification 'Emergency access'"
+make docker-run CMD="active --output json"
 ```

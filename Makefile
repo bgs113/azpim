@@ -2,7 +2,7 @@ VERSION  ?= $(shell git -C . describe --tags --always --dirty 2>/dev/null || ech
 LDFLAGS  := -s -w -X main.version=$(VERSION)
 DIST     := dist
 
-.PHONY: build release install uninstall clean tools lint vuln check
+.PHONY: build release install uninstall clean tools lint vuln check docker-build docker-run
 
 ## build: build for the current platform
 build:
@@ -45,7 +45,7 @@ tools:
 
 ## lint: run golangci-lint
 lint:
-	mise exec -- golangci-lint run ./...
+	golangci-lint run ./...
 
 ## vuln: scan dependencies for known vulnerabilities
 vuln:
@@ -53,6 +53,18 @@ vuln:
 
 ## check: run all quality and security checks
 check: lint vuln
+
+## docker-build: build the container image (uses Chainguard hardened base images)
+docker-build:
+	docker build --build-arg VERSION=$(VERSION) -t azpim:$(VERSION) -t azpim:latest .
+
+## docker-run: run azpim in a container, mounting host az login session and cache
+##   Pass subcommand + flags via CMD, e.g.: make docker-run CMD="eligible --scope /"
+docker-run:
+	docker run --rm -it \
+	  -v "$(HOME)/.azure:/home/nonroot/.azure:ro" \
+	  -v "$(HOME)/.cache/azpim:/home/nonroot/.cache/azpim" \
+	  azpim:latest $(CMD)
 
 ## clean: remove build artefacts
 clean:
