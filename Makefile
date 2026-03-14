@@ -2,7 +2,7 @@ VERSION  ?= $(shell git -C . describe --tags --always --dirty 2>/dev/null || ech
 LDFLAGS  := -s -w -X main.version=$(VERSION)
 DIST     := dist
 
-.PHONY: build release install uninstall clean
+.PHONY: build release install uninstall clean tools lint vuln check
 
 ## build: build for the current platform
 build:
@@ -38,6 +38,21 @@ install: build
 uninstall:
 	rm -f $(HOME)/.local/bin/azpim
 	@echo "Removed $(HOME)/.local/bin/azpim"
+
+## tools: install go-based quality tools (golangci-lint managed via mise)
+tools:
+	go install golang.org/x/vuln/cmd/govulncheck@latest
+
+## lint: run golangci-lint
+lint:
+	mise exec -- golangci-lint run ./...
+
+## vuln: scan dependencies for known vulnerabilities
+vuln:
+	govulncheck ./...
+
+## check: run all quality and security checks
+check: lint vuln
 
 ## clean: remove build artefacts
 clean:

@@ -1,0 +1,40 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - gosec
+    - revive
+    - misspell
+    - gocyclo
+    - bodyclose
+    - noctx
+    - unused
+
+  settings:
+    gocyclo:
+      min-complexity: 20
+
+    gosec:
+      excludes:
+        - G304  # file path from variable (intentional: cache/config reads)
+
+    revive:
+      rules:
+        - name: exported
+          disabled: true       # CLI tool, not a library
+        - name: package-comments
+          disabled: true       # internal packages, not a library
+        - name: unused-parameter
+          disabled: true       # cobra RunE signature requires args []string
+
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Fscan
+        - fmt.Fscanf
+        - fmt.Fscanln
