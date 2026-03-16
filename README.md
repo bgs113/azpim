@@ -9,11 +9,16 @@ A CLI tool for managing Azure Privileged Identity Management (PIM) role assignme
 
 ## Installation
 
-Releases are distributed as ZIP files hosted on SharePoint. SharePoint requires authentication, so command-line tools like `curl` or `wget` won't work — **download the ZIP using your web browser**.
+Pre-built binaries are available from two sources — download the ZIP for your platform from either:
+
+- **[GitHub Releases](https://github.com/bgs113/azpim/releases/latest)** — public, no authentication required
+- **SharePoint** — requires authentication; use your web browser (`curl`/`wget` won't work)
+
+Each GitHub Release also includes a `checksums.txt` file with SHA256 hashes to verify your download.
 
 ### macOS
 
-Download the ZIP for your architecture from SharePoint:
+Download the ZIP for your architecture:
 
 | Architecture  | File                            |
 | ------------- | ------------------------------- |
@@ -49,7 +54,7 @@ source ~/.zshrc
 
 ### Linux
 
-Download `azpim-vX.Y.Z-linux-amd64.zip` from SharePoint. Unzip and install (replace the filename with the version you downloaded):
+Download `azpim-vX.Y.Z-linux-amd64.zip` from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest) or SharePoint. Unzip and install (replace the filename with the version you downloaded):
 
 ```bash
 unzip azpim-vX.Y.Z-linux-amd64.zip
@@ -66,7 +71,7 @@ source ~/.bashrc
 
 ### Windows
 
-Download `azpim-vX.Y.Z-windows-amd64.zip` from SharePoint.
+Download `azpim-vX.Y.Z-windows-amd64.zip` from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest) or SharePoint.
 
 Extract the ZIP — in File Explorer: right-click → **Extract All**, or in PowerShell
 (replace the filename with the version you downloaded):
@@ -137,29 +142,28 @@ Remove-Item "$HOME\bin\azpim.exe"
 
 ### Docker
 
-`azpim` is available as a container image built on [Chainguard](https://cgr.dev) hardened base images (distroless, nonroot, near-zero CVEs).
+`azpim` is published to the [GitHub Container Registry](https://ghcr.io/bgs113/azpim) as a hardened image built on [Chainguard](https://cgr.dev) distroless base images (nonroot, near-zero CVEs). A new image is pushed automatically on every release.
 
-**Build the image:**
+**Pull the latest image:**
 
 ```bash
-make docker-build
+docker pull ghcr.io/bgs113/azpim:latest
 ```
 
 **Run using your existing `az login` session** (mounts Azure CLI credentials and cache from the host):
 
 ```bash
-make docker-run CMD="eligible"
-make docker-run CMD="active --human"
-make docker-run CMD="activate --subscription 00000000-0000-0000-0000-000000000000 --role Contributor --duration 4 --justification 'Incident response'"
-```
-
-Or invoke `docker run` directly (note the nonroot home directory path):
-
-```bash
 docker run --rm -it \
   -v ~/.azure:/home/nonroot/.azure:ro \
   -v ~/.cache/azpim:/home/nonroot/.cache/azpim \
-  azpim:latest eligible
+  ghcr.io/bgs113/azpim:latest eligible
+
+docker run --rm -it \
+  -v ~/.azure:/home/nonroot/.azure:ro \
+  -v ~/.cache/azpim:/home/nonroot/.cache/azpim \
+  ghcr.io/bgs113/azpim:latest activate \
+    --subscription 00000000-0000-0000-0000-000000000000 \
+    --role Contributor --duration 4 --justification "Incident response"
 ```
 
 **Run using a service principal** (environment variable auth — no volume mount needed):
@@ -169,10 +173,17 @@ docker run --rm -it \
   -e AZURE_TENANT_ID=<tenant-id> \
   -e AZURE_CLIENT_ID=<client-id> \
   -e AZURE_CLIENT_SECRET=<client-secret> \
-  azpim:latest eligible
+  ghcr.io/bgs113/azpim:latest eligible
 ```
 
 > **Interactive prompts:** Commands that show interactive selection menus (e.g. `azpim activate` without `--role`) require a TTY, which `docker run -it` provides. Fully flag-specified commands work without `-t`.
+
+**Build the image locally** (from source):
+
+```bash
+make docker-build   # builds azpim:latest from the local Dockerfile
+make docker-run CMD="eligible"
+```
 
 ---
 
@@ -192,27 +203,20 @@ make build        # produces ./azpim
 make install
 ```
 
-**Cross-compile release binaries for all platforms:**
+**Test a local release build without publishing:**
 
 ```bash
-make release
+make snapshot   # produces dist/ artifacts via GoReleaser, no tag required
 ```
 
-Produces versioned zipped binaries in `dist/`:
-
-```text
-dist/azpim-v0.2.0-darwin-arm64.zip
-dist/azpim-v0.2.0-darwin-amd64.zip
-dist/azpim-v0.2.0-linux-amd64.zip
-dist/azpim-v0.2.0-windows-amd64.zip
-```
-
-The version is derived automatically from the current git tag (e.g. `v0.2.0`). Tag before releasing:
+**Cut a release** (requires [GoReleaser](https://goreleaser.com) — installed via `mise install`):
 
 ```bash
-git tag -a v0.2.0 -m "v0.2.0"
-make release
+git tag -a v0.4.0 -m "v0.4.0"
+git push --tags   # triggers the release CI workflow automatically
 ```
+
+The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts and `checksums.txt`, and publishes the container image to GHCR.
 
 ---
 
@@ -411,9 +415,8 @@ azpim deactivate --all
 # Export active roles as JSON
 azpim active --output json | jq '.[].role_name'
 
-# Same workflows via Docker
-make docker-run CMD="eligible"
-make docker-run CMD="active --human"
-make docker-run CMD="activate --subscription 00000000-0000-0000-0000-000000000000 --role Owner --duration 2 --justification 'Emergency access'"
-make docker-run CMD="active --output json"
+# Same workflows via Docker (published image)
+docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:latest eligible
+docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:latest active --human
+docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:latest active --output json
 ```
