@@ -2,29 +2,19 @@ VERSION  ?= $(shell git -C . describe --tags --always --dirty 2>/dev/null || ech
 LDFLAGS  := -s -w -X main.version=$(VERSION)
 DIST     := dist
 
-.PHONY: build release install uninstall clean tools lint vuln check docker-build docker-run
+.PHONY: build release snapshot install uninstall clean tools lint vuln check docker-build docker-run
 
 ## build: build for the current platform
 build:
 	go build -ldflags "$(LDFLAGS)" -o azpim .
 
-## release: cross-compile binaries for macOS (arm64 + amd64), Linux (amd64), and Windows (amd64)
-release: clean
-	mkdir -p $(DIST)
+## release: build and publish a release via GoReleaser (requires a tagged commit)
+release:
+	goreleaser release --clean
 
-	GOOS=darwin  GOARCH=arm64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/azpim-$(VERSION)-darwin-arm64   .
-	GOOS=darwin  GOARCH=amd64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/azpim-$(VERSION)-darwin-amd64   .
-	GOOS=windows GOARCH=amd64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/azpim-$(VERSION)-windows-amd64.exe .
-	GOOS=linux   GOARCH=amd64  go build -ldflags "$(LDFLAGS)" -o $(DIST)/azpim-$(VERSION)-linux-amd64    .
-
-	cd $(DIST) && \
-	  zip azpim-$(VERSION)-darwin-arm64.zip   azpim-$(VERSION)-darwin-arm64   && \
-	  zip azpim-$(VERSION)-darwin-amd64.zip   azpim-$(VERSION)-darwin-amd64   && \
-	  zip azpim-$(VERSION)-windows-amd64.zip  azpim-$(VERSION)-windows-amd64.exe && \
-	  zip azpim-$(VERSION)-linux-amd64.zip    azpim-$(VERSION)-linux-amd64
-
-	@echo "Release $(VERSION) artifacts in $(DIST)/"
-	@ls -lh $(DIST)/*.zip
+## snapshot: build release artifacts locally without publishing (for testing)
+snapshot:
+	goreleaser release --snapshot --clean
 
 ## install: install the current-platform binary to ~/.local/bin (no sudo needed)
 install: build
