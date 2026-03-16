@@ -54,7 +54,14 @@ source ~/.zshrc
 
 ### Linux
 
-Download `azpim-vX.Y.Z-linux-amd64.zip` from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest) or SharePoint. Unzip and install (replace the filename with the version you downloaded):
+Download the ZIP for your architecture from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest) or SharePoint:
+
+| Architecture | File                            |
+| ------------ | ------------------------------- |
+| x86-64       | `azpim-vX.Y.Z-linux-amd64.zip`  |
+| ARM64        | `azpim-vX.Y.Z-linux-arm64.zip`  |
+
+Unzip and install (replace the filename with the version you downloaded):
 
 ```bash
 unzip azpim-vX.Y.Z-linux-amd64.zip

@@ -4,16 +4,28 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v0.3.1)'
+        required: true
+        type: string
 
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write  # required to create GitHub Releases
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
+      # For workflow_dispatch: check out main so the latest .goreleaser.yml is used,
+      # then tell GoReleaser which tag to release via GORELEASER_CURRENT_TAG.
+      # For tag push: check out the tag normally.
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # full history so git describe and goreleaser resolve the tag
+          fetch-depth: 0
+          ref: ${{ github.ref }}
 
       - uses: actions/setup-go@v5
         with:
@@ -23,17 +35,22 @@ jobs:
       - uses: goreleaser/goreleaser-action@v6
         with:
           version: latest
-          args: release --clean
+          args: release --clean${{ github.event_name == 'workflow_dispatch' && ' --skip=validate' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ env.TAG }}
 
   docker:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write  # required to push to GitHub Container Registry
+    env:
+      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -48,8 +65,8 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=${{ env.TAG }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
 
       - name: Build and push image
         uses: docker/build-push-action@v6
@@ -59,4 +76,4 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ env.TAG }}
