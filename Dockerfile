@@ -1,5 +1,5 @@
 # ── build stage ──────────────────────────────────────────────────────────────
-FROM cgr.dev/chainguard/go:latest AS builder
+FROM cgr.dev/chainguard/go:1.26.4 AS builder
 
 ARG VERSION=dev
 
