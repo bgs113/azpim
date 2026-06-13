@@ -15,10 +15,10 @@ func TestTruncate(t *testing.T) {
 		n    int
 		want string
 	}{
-		{"hello", 10, "hello"},    // shorter than limit
-		{"hello", 5, "hello"},     // exact length — not truncated
+		{"hello", 10, "hello"},       // shorter than limit
+		{"hello", 5, "hello"},        // exact length — not truncated
 		{"hello world", 5, "hello…"}, // over limit — truncated with ellipsis
-		{"", 5, ""},               // empty string
+		{"", 5, ""},                  // empty string
 		{"héllo world", 5, "héllo…"}, // multi-byte runes — "héllo" is 5 runes
 	}
 	for _, tt := range tests {
@@ -101,10 +101,10 @@ func TestPrintRequestsTableRow(t *testing.T) {
 	var buf bytes.Buffer
 	requests := []pim.ScheduleRequestEntry{
 		{
-			RoleName:     "Owner",
-			ScopeDisplay: "my-subscription",
-			RequestType:  "Activate",
-			Status:       "Pending",
+			RoleName:      "Owner",
+			ScopeDisplay:  "my-subscription",
+			RequestType:   "Activate",
+			Status:        "Pending",
 			Justification: "incident response",
 		},
 	}

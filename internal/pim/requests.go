@@ -10,19 +10,19 @@ import (
 
 // ScheduleRequestEntry holds display fields for one role assignment schedule request.
 type ScheduleRequestEntry struct {
-	RequestName   string // UUID assigned at creation; used for deduplication
-	RoleName      string
-	Scope         string // raw ARM scope
-	ScopeDisplay  string // human-readable scope name
-	ResourceType  string
-	RequestType   string // "Activate", "Extend", "Deactivate", or raw ARM value
-	Status        string // "Active", "Pending", "Denied", "Failed", "Canceled", or raw ARM value
-	Justification string
-	RequestedAt   time.Time
+	RequestName    string // UUID assigned at creation; used for deduplication
+	RoleName       string
+	Scope          string // raw ARM scope
+	ScopeDisplay   string // human-readable scope name
+	ResourceType   string
+	RequestType    string // "Activate", "Extend", "Deactivate", or raw ARM value
+	Status         string // "Active", "Pending", "Denied", "Failed", "Canceled", or raw ARM value
+	Justification  string
+	RequestedAt    time.Time
 	HasRequestedAt bool
-	ExpiresAt     time.Time
-	HasExpiry     bool
-	RoleDefID     string
+	ExpiresAt      time.Time
+	HasExpiry      bool
+	RoleDefID      string
 }
 
 // IsPending reports whether the request is awaiting admin approval.

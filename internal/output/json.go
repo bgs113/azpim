@@ -22,17 +22,17 @@ type eligibleJSON struct {
 }
 
 type activeJSON struct {
-	RoleName              string `json:"role_name"`
-	Resource              string `json:"resource"`
-	ResourceType          string `json:"resource_type"`
-	MembershipType        string `json:"membership_type"`
-	Condition             string `json:"condition,omitempty"`
-	State                 string `json:"state"`
-	EndTime               string `json:"end_time,omitempty"`
-	TimeRemainingSeconds  int64  `json:"time_remaining_seconds,omitempty"`
-	TimeRemainingDisplay  string `json:"time_remaining_display"`
-	Scope                 string `json:"scope"`
-	RoleDefID             string `json:"role_definition_id"`
+	RoleName             string `json:"role_name"`
+	Resource             string `json:"resource"`
+	ResourceType         string `json:"resource_type"`
+	MembershipType       string `json:"membership_type"`
+	Condition            string `json:"condition,omitempty"`
+	State                string `json:"state"`
+	EndTime              string `json:"end_time,omitempty"`
+	TimeRemainingSeconds int64  `json:"time_remaining_seconds,omitempty"`
+	TimeRemainingDisplay string `json:"time_remaining_display"`
+	Scope                string `json:"scope"`
+	RoleDefID            string `json:"role_definition_id"`
 }
 
 // PrintEligibleJSON writes eligible assignments as a JSON array to w.

@@ -10,10 +10,10 @@ func TestExtractJSONStringValue(t *testing.T) {
 	}{
 		{`{"oid":"abc123","tid":"tenant1"}`, "oid", "abc123"},
 		{`{"oid":"abc123","tid":"tenant1"}`, "tid", "tenant1"},
-		{`{"oid":"abc123"}`, "tid", ""},  // missing key
+		{`{"oid":"abc123"}`, "tid", ""}, // missing key
 		{`{}`, "oid", ""},
 		{`{"oid":""}`, "oid", ""},        // empty value
-		{`{"oid":"a\"b"}`, "oid", "a\\"},  // stops at first unescaped quote
+		{`{"oid":"a\"b"}`, "oid", "a\\"}, // stops at first unescaped quote
 	}
 	for _, tt := range tests {
 		got := extractJSONStringValue(tt.json, tt.key)

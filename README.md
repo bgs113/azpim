@@ -14,7 +14,7 @@ Pre-built binaries are available from two sources — download the ZIP for your 
 - **[GitHub Releases](https://github.com/bgs113/azpim/releases/latest)** — public, no authentication required
 - **SharePoint** — requires authentication; use your web browser (`curl`/`wget` won't work)
 
-Each GitHub Release also includes a `checksums.txt` file with SHA256 hashes to verify your download.
+Each GitHub Release also includes a `checksums.txt` file with SHA256 hashes and an `.sbom.json` SPDX software bill of materials for each archive.
 
 ### macOS
 
@@ -25,18 +25,18 @@ Download the ZIP for your architecture:
 | Apple Silicon | `azpim-vX.Y.Z-darwin-arm64.zip` |
 | Intel         | `azpim-vX.Y.Z-darwin-amd64.zip` |
 
-Unzip and install (replace the filename with the version you downloaded):
+Unzip and install (replace `X.Y.Z` with the version you downloaded):
 
 ```bash
 # Apple Silicon
 unzip azpim-vX.Y.Z-darwin-arm64.zip
 mkdir -p ~/.local/bin
-install -m 755 azpim-vX.Y.Z-darwin-arm64 ~/.local/bin/azpim
+install -m 755 azpim ~/.local/bin/azpim
 
 # Intel
 unzip azpim-vX.Y.Z-darwin-amd64.zip
 mkdir -p ~/.local/bin
-install -m 755 azpim-vX.Y.Z-darwin-amd64 ~/.local/bin/azpim
+install -m 755 azpim ~/.local/bin/azpim
 ```
 
 Ensure `~/.local/bin` is on your PATH (add to `~/.zshrc` if needed):
@@ -61,12 +61,12 @@ Download the ZIP for your architecture from [GitHub Releases](https://github.com
 | x86-64       | `azpim-vX.Y.Z-linux-amd64.zip`  |
 | ARM64        | `azpim-vX.Y.Z-linux-arm64.zip`  |
 
-Unzip and install (replace the filename with the version you downloaded):
+Unzip and install (replace `X.Y.Z` with the version you downloaded):
 
 ```bash
 unzip azpim-vX.Y.Z-linux-amd64.zip
 mkdir -p ~/.local/bin
-install -m 755 azpim-vX.Y.Z-linux-amd64 ~/.local/bin/azpim
+install -m 755 azpim ~/.local/bin/azpim
 ```
 
 Ensure `~/.local/bin` is on your PATH (add to `~/.bashrc` if needed):
@@ -81,11 +81,10 @@ source ~/.bashrc
 Download `azpim-vX.Y.Z-windows-amd64.zip` from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest) or SharePoint.
 
 Extract the ZIP — in File Explorer: right-click → **Extract All**, or in PowerShell
-(replace the filename with the version you downloaded):
+(replace `X.Y.Z` with the version you downloaded):
 
 ```powershell
 Expand-Archive -Path azpim-vX.Y.Z-windows-amd64.zip -DestinationPath .
-Rename-Item .\azpim-vX.Y.Z-windows-amd64.exe azpim.exe
 ```
 
 > **SmartScreen warning**: Windows may block the executable because it is not code-signed. If you see a "Windows protected your PC" dialog, click **More info → Run anyway**.
@@ -112,6 +111,26 @@ Move-Item -Force azpim.exe "$HOME\bin\azpim.exe"
 Restart your terminal after updating PATH.
 
 After this, you can update azpim by simply replacing `$HOME\bin\azpim.exe` with a newer version.
+
+### Verify the download
+
+After downloading, verify the checksum against `checksums.txt` from the same release:
+
+```bash
+# macOS
+shasum -a 256 --check checksums.txt --ignore-missing
+
+# Linux
+sha256sum --check checksums.txt --ignore-missing
+```
+
+```powershell
+# Windows (replace filename with the version you downloaded)
+$file = "azpim-vX.Y.Z-windows-amd64.zip"
+$hash = (Get-FileHash $file -Algorithm SHA256).Hash.ToLower()
+$expected = (Select-String $file checksums.txt).Line.Split(" ")[0]
+if ($hash -eq $expected) { "OK" } else { "MISMATCH" }
+```
 
 ### Verify installation
 
@@ -147,15 +166,26 @@ Remove-Item "$HOME\bin\azpim.exe"
 )
 ```
 
-### Docker
+### Container image
 
-`azpim` is published to the [GitHub Container Registry](https://ghcr.io/bgs113/azpim) as a hardened image built on [Chainguard](https://cgr.dev) distroless base images (nonroot, near-zero CVEs). A new image is pushed automatically on every release.
+`azpim` is published to the [GitHub Container Registry](https://ghcr.io/bgs113/azpim) as a hardened image built with [Ko](https://ko.build) on a [Chainguard](https://cgr.dev) distroless base (nonroot, near-zero CVEs). A new image is pushed automatically on every release. Each image has an SPDX SBOM attached to its manifest in the registry.
 
 **Pull the latest image:**
 
 ```bash
 docker pull ghcr.io/bgs113/azpim:latest
 ```
+
+**Verify the image signature** (requires [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):
+
+```bash
+cosign verify \
+  --certificate-identity-regexp='https://github.com/bgs113/azpim/.github/workflows/release.yml' \
+  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+  ghcr.io/bgs113/azpim:latest
+```
+
+Signatures are keyless — the certificate proves the image was built by the Release workflow in this repository and is recorded in [Rekor's](https://rekor.sigstore.dev) public transparency log.
 
 **Run using your existing `az login` session** (mounts Azure CLI credentials and cache from the host):
 
@@ -185,18 +215,11 @@ docker run --rm -it \
 
 > **Interactive prompts:** Commands that show interactive selection menus (e.g. `azpim activate` without `--role`) require a TTY, which `docker run -it` provides. Fully flag-specified commands work without `-t`.
 
-**Build the image locally** (from source):
-
-```bash
-make docker-build   # builds azpim:latest from the local Dockerfile
-make docker-run CMD="eligible"
-```
-
 ---
 
 ## Building from source
 
-Requires [Go 1.22+](https://go.dev/dl/).
+Requires [Go 1.26+](https://go.dev/dl/).
 
 **Build for the current platform:**
 
@@ -223,7 +246,7 @@ git tag -a v0.4.0 -m "v0.4.0"
 git push --tags   # triggers the release CI workflow automatically
 ```
 
-The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts and `checksums.txt`, and publishes the container image to GHCR.
+The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts, per-archive SPDX SBOMs, and `checksums.txt`, builds and pushes the container image to GHCR via Ko, and signs the image with keyless Cosign.
 
 ---
 
@@ -234,12 +257,17 @@ The CI workflow cross-compiles for all platforms, creates the GitHub Release wit
 1. Environment variables (`AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`)
 2. Workload identity / managed identity
 3. **Azure CLI** (`az login`) — the most common for local use
+4. **Azure Developer CLI** (`azd auth login`)
 
-For personal use, simply log in with the Azure CLI:
+For personal use, log in with either the Azure CLI or the Azure Developer CLI:
 
 ```bash
 az login
+# or
+azd auth login
 ```
+
+> **Note:** Azure PowerShell (`Connect-AzAccount`) is not supported — it is not included in the Go SDK's `DefaultAzureCredential` chain.
 
 ---
 

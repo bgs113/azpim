@@ -7,7 +7,7 @@ import (
 )
 
 func ptrRequestType(rt armauthorization.RequestType) *armauthorization.RequestType { return &rt }
-func ptrStatus(s armauthorization.Status) *armauthorization.Status                { return &s }
+func ptrStatus(s armauthorization.Status) *armauthorization.Status                 { return &s }
 
 func TestHumanizeRequestType(t *testing.T) {
 	tests := []struct {

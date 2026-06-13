@@ -17,7 +17,7 @@ import (
 func NewCredential() (azcore.TokenCredential, error) {
 	cred, err := azidentity.NewDefaultAzureCredential(nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create Azure credential: %w\n\nTip: run 'az login' first", err)
+		return nil, fmt.Errorf("failed to create Azure credential: %w\n\nTip: run 'az login' or 'azd auth login' first", err)
 	}
 	return cred, nil
 }
