@@ -3,11 +3,11 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag to release (e.g. v0.3.1)'
+        description: "Tag to release (e.g. v0.3.1)"
         required: true
         type: string
 
@@ -15,7 +15,9 @@ jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # required to create GitHub Releases
+      contents: write # create GitHub releases and upload assets
+      packages: write # push container images to ghcr.io via ko
+      id-token: write # obtain OIDC token for keyless Cosign signing
     env:
       TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
@@ -32,25 +34,9 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - uses: goreleaser/goreleaser-action@v6
-        with:
-          version: latest
-          args: release --clean${{ github.event_name == 'workflow_dispatch' && ' --skip=validate' || '' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_CURRENT_TAG: ${{ env.TAG }}
+      - uses: anchore/sbom-action/download-syft@v0
 
-  docker:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write  # required to push to GitHub Container Registry
-    env:
-      TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
+      - uses: sigstore/cosign-installer@v3
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -59,21 +45,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract image metadata
-        id: meta
-        uses: docker/metadata-action@v5
+      - uses: goreleaser/goreleaser-action@v6
         with:
-          images: ghcr.io/${{ github.repository }}
-          tags: |
-            type=semver,pattern={{version}},value=${{ env.TAG }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ env.TAG }}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ env.TAG }}
+          version: latest
+          args: release --clean${{ github.event_name == 'workflow_dispatch' && ' --skip=validate' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GORELEASER_CURRENT_TAG: ${{ env.TAG }}
+          KO_DOCKER_REPO: ghcr.io/bgs113/azpim

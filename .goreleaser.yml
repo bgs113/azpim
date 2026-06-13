@@ -17,6 +17,29 @@ builds:
       - windows_amd64_v1
       - windows_arm64
 
+kos:
+  - base_image: cgr.dev/chainguard/static:latest
+    tags:
+      - "{{.Version}}"
+      - "{{.Major}}.{{.Minor}}"
+      - "{{if not .Prerelease}}latest{{end}}"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    ldflags:
+      - -s -w -X main.version={{.Tag}}
+
+docker_signs:
+  - cmd: cosign
+    artifacts: all
+    args:
+      - sign
+      - --yes
+      - ${artifact}
+
+sboms:
+  - artifacts: archive
+
 archives:
   - formats:
       - zip
