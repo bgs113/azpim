@@ -19,6 +19,7 @@ builds:
 
 kos:
   - base_image: cgr.dev/chainguard/static:latest
+    bare: true
     tags:
       - "{{.Version}}"
       - "{{.Major}}.{{.Minor}}"
