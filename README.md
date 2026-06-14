@@ -18,6 +18,41 @@ Each GitHub Release also includes a `checksums.txt` file with SHA256 hashes and 
 
 ### macOS
 
+Install using the [GitHub CLI](https://cli.github.com/) (`gh`), which handles private repo auth automatically.
+
+Add the following to `~/.zshrc`, then run `source ~/.zshrc`:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+
+azpim-update() {
+  local arch tmp
+  arch=$(uname -m); [[ "$arch" == "arm64" ]] || arch="amd64"
+  tmp=$(mktemp -d)
+  gh release download --repo bgs113/azpim --pattern "*-darwin-${arch}.zip" --dir "$tmp"
+  unzip -q "$tmp"/*.zip azpim -d "$tmp"
+  mkdir -p ~/.local/bin && install -m 755 "$tmp/azpim" ~/.local/bin/azpim
+  rm -rf "$tmp"
+  ~/.local/bin/azpim --version
+}
+```
+
+Then install or update with:
+
+```bash
+azpim-update
+```
+
+> **Gatekeeper prompt**: If macOS blocks the binary on first run, go to **System Settings → Privacy & Security** and click **Allow Anyway**, or clear the quarantine attribute:
+>
+> ```bash
+> xattr -dr com.apple.quarantine ~/.local/bin/azpim
+> ```
+
+> **Homebrew:** A cask is published to `bgs113/homebrew-tap` with each release and will be installable via `brew install --cask azpim` if the repository is made public.
+
+### macOS (ZIP download)
+
 Download the ZIP for your architecture:
 
 | Architecture  | File                            |
@@ -124,6 +159,16 @@ shasum -a 256 --check checksums.txt --ignore-missing
 sha256sum --check checksums.txt --ignore-missing
 ```
 
+To also verify the signature on `checksums.txt` itself (requires [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):
+
+```bash
+cosign verify-blob \
+  --certificate-identity-regexp='https://github.com/bgs113/azpim/.github/workflows/release.yml' \
+  --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
+  --bundle checksums.txt.bundle \
+  checksums.txt
+```
+
 ```powershell
 # Windows (replace filename with the version you downloaded)
 $file = "azpim-vX.Y.Z-windows-amd64.zip"
@@ -140,7 +185,7 @@ azpim --version
 
 ### Uninstallation
 
-**macOS / Linux** (binary install or `make install` — both use the same location):
+**macOS / Linux** (binary install, `gh release download`, or `make install` — all use the same location):
 
 ```bash
 rm ~/.local/bin/azpim

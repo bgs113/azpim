@@ -30,6 +30,16 @@ kos:
     ldflags:
       - -s -w -X main.version={{.Tag}}
 
+signs:
+  - cmd: cosign
+    artifacts: checksum
+    signature: "${artifact}.bundle"
+    args:
+      - sign-blob
+      - --yes
+      - --bundle=${signature}
+      - ${artifact}
+
 docker_signs:
   - cmd: cosign
     artifacts: all
@@ -37,6 +47,18 @@ docker_signs:
       - sign
       - --yes
       - ${artifact}
+
+homebrew_casks:
+  - name: azpim
+    binaries:
+      - azpim
+    repository:
+      owner: bgs113
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/bgs113/azpim
+    description: "CLI for managing Azure Privileged Identity Management (PIM) role assignments"
+    skip_upload: auto
 
 sboms:
   - artifacts: archive
