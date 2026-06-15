@@ -3,7 +3,7 @@ package pim
 import (
 	"testing"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v3"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 )
 
 func ptrRequestType(rt armauthorization.RequestType) *armauthorization.RequestType { return &rt }

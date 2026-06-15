@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v3"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 )
 
 // EligibleAssignment holds the display fields for one eligible role assignment.
