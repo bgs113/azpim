@@ -24,7 +24,7 @@ jobs:
       # For workflow_dispatch: check out main so the latest .goreleaser.yml is used,
       # then tell GoReleaser which tag to release via GORELEASER_CURRENT_TAG.
       # For tag push: check out the tag normally.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           ref: ${{ github.ref }}
@@ -45,7 +45,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: goreleaser/goreleaser-action@v6
+      - uses: goreleaser/goreleaser-action@v7
         with:
           version: "~> v2"
           args: release --clean${{ github.event_name == 'workflow_dispatch' && ' --skip=validate' || '' }}
