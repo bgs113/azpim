@@ -49,6 +49,11 @@ Examples:
 		}
 		defer clients.SaveRoleDefCache()
 
+		principalID, err := auth.ResolvePrincipalID(ctx, cred)
+		if err != nil {
+			return fmt.Errorf("resolve principal ID: %w", err)
+		}
+
 		scopes, err := resolveScopes(ctx, clients, cred, extendScope)
 		if err != nil {
 			return err
@@ -80,11 +85,6 @@ Examples:
 			if err != nil {
 				return err
 			}
-		}
-
-		principalID, err := auth.ResolvePrincipalID(ctx, cred)
-		if err != nil {
-			return fmt.Errorf("resolve principal ID: %w", err)
 		}
 
 		opts := pim.ExtendOptions{

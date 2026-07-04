@@ -102,22 +102,32 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 }
 
 // ListRequestsForScopes queries multiple ARM scopes in parallel, combines the
-// results, and deduplicates by request name. Per-scope errors are silently dropped.
+// results, and deduplicates by request name. Per-scope errors (e.g. PIM not
+// configured, 403) are dropped when at least one scope succeeds. If every
+// scope fails the first error is returned.
 func (c *Clients) ListRequestsForScopes(ctx context.Context, scopes []string) ([]ScheduleRequestEntry, error) {
 	type result struct {
 		entries []ScheduleRequestEntry
+		err     error
 	}
 	ch := make(chan result, len(scopes))
 	for _, scope := range scopes {
 		go func() {
-			e, _ := c.ListRequests(ctx, scope) // ignore per-scope errors
-			ch <- result{e}
+			e, err := c.ListRequests(ctx, scope)
+			ch <- result{e, err}
 		}()
 	}
 	var all []ScheduleRequestEntry
+	var firstErr error
 	for range scopes {
 		r := <-ch
 		all = append(all, r.entries...)
+		if r.err != nil && firstErr == nil {
+			firstErr = r.err
+		}
+	}
+	if len(all) == 0 && firstErr != nil {
+		return nil, firstErr
 	}
 	return deduplicateRequests(all), nil
 }

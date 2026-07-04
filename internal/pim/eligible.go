@@ -81,24 +81,32 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 }
 
 // ListEligibleForScopes queries multiple ARM scopes in parallel, combines the
-// results, and deduplicates by (RoleDefID, Scope, MembershipType). Errors from
-// individual scopes are silently dropped (e.g. scopes where PIM is not
-// configured or the user lacks access).
+// results, and deduplicates by (RoleDefID, Scope, MembershipType). Per-scope
+// errors (e.g. PIM not configured, 403) are dropped when at least one scope
+// succeeds. If every scope fails the first error is returned.
 func (c *Clients) ListEligibleForScopes(ctx context.Context, scopes []string) ([]EligibleAssignment, error) {
 	type result struct {
 		assignments []EligibleAssignment
+		err         error
 	}
 	ch := make(chan result, len(scopes))
 	for _, scope := range scopes {
 		go func() {
-			a, _ := c.ListEligible(ctx, scope) // ignore per-scope errors
-			ch <- result{a}
+			a, err := c.ListEligible(ctx, scope)
+			ch <- result{a, err}
 		}()
 	}
 	var all []EligibleAssignment
+	var firstErr error
 	for range scopes {
 		r := <-ch
 		all = append(all, r.assignments...)
+		if r.err != nil && firstErr == nil {
+			firstErr = r.err
+		}
+	}
+	if len(all) == 0 && firstErr != nil {
+		return nil, firstErr
 	}
 	return deduplicateEligible(all), nil
 }

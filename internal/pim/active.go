@@ -156,22 +156,31 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 
 // ListActiveForScopes queries multiple ARM scopes in parallel, combines the
 // results, and deduplicates by (RoleDefID, Scope, AssignmentType). Per-scope
-// errors are silently dropped.
+// errors (e.g. PIM not configured, 403) are dropped when at least one scope
+// succeeds. If every scope fails the first error is returned.
 func (c *Clients) ListActiveForScopes(ctx context.Context, scopes []string, includePermanent bool) ([]ActiveAssignment, error) {
 	type result struct {
 		assignments []ActiveAssignment
+		err         error
 	}
 	ch := make(chan result, len(scopes))
 	for _, scope := range scopes {
 		go func() {
-			a, _ := c.ListActive(ctx, scope, includePermanent) // ignore per-scope errors
-			ch <- result{a}
+			a, err := c.ListActive(ctx, scope, includePermanent)
+			ch <- result{a, err}
 		}()
 	}
 	var all []ActiveAssignment
+	var firstErr error
 	for range scopes {
 		r := <-ch
 		all = append(all, r.assignments...)
+		if r.err != nil && firstErr == nil {
+			firstErr = r.err
+		}
+	}
+	if len(all) == 0 && firstErr != nil {
+		return nil, firstErr
 	}
 	return deduplicateActive(all), nil
 }

@@ -46,6 +46,11 @@ Examples:
 		}
 		defer clients.SaveRoleDefCache()
 
+		principalID, err := auth.ResolvePrincipalID(ctx, cred)
+		if err != nil {
+			return fmt.Errorf("resolve principal ID: %w", err)
+		}
+
 		scopes, err := resolveScopes(ctx, clients, cred, deactivateScope)
 		if err != nil {
 			return err
@@ -58,11 +63,6 @@ Examples:
 		}
 		if len(active) == 0 {
 			return fmt.Errorf("no active (time-bound) assignments found")
-		}
-
-		principalID, err := auth.ResolvePrincipalID(ctx, cred)
-		if err != nil {
-			return fmt.Errorf("resolve principal ID: %w", err)
 		}
 
 		if deactivateAll {
