@@ -31,8 +31,9 @@ type Clients struct {
 	Subscriptions     *armsubscriptions.Client
 	ManagementGroups  *armmanagementgroups.Client
 	cred              azcore.TokenCredential
-	mu                sync.Mutex
-	roleDefFlight     singleflight.Group
+	mu               sync.Mutex
+	roleDefFlight    singleflight.Group
+	scopeNameFlight  singleflight.Group
 	// roleDefCache caches role definition display names keyed by their full ARM ID.
 	roleDefCache map[string]string
 	// scopeNameCache caches human-readable display names keyed by ARM scope string.

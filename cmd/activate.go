@@ -14,6 +14,7 @@ import (
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -57,14 +58,31 @@ Examples:
 			return err
 		}
 
-		eligible, err := clients.ListEligibleForScopes(ctx, scopes)
-		if err != nil {
-			return fmt.Errorf("fetch eligible assignments: %w", err)
-		}
-
-		active, err := clients.ListActiveForScopes(ctx, scopes, false)
-		if err != nil {
-			return fmt.Errorf("fetch active assignments: %w", err)
+		var (
+			eligible []pim.EligibleAssignment
+			active   []pim.ActiveAssignment
+		)
+		{
+			g, gctx := errgroup.WithContext(ctx)
+			g.Go(func() error {
+				var err error
+				eligible, err = clients.ListEligibleForScopes(gctx, scopes)
+				if err != nil {
+					return fmt.Errorf("fetch eligible assignments: %w", err)
+				}
+				return nil
+			})
+			g.Go(func() error {
+				var err error
+				active, err = clients.ListActiveForScopes(gctx, scopes, false)
+				if err != nil {
+					return fmt.Errorf("fetch active assignments: %w", err)
+				}
+				return nil
+			})
+			if err := g.Wait(); err != nil {
+				return err
+			}
 		}
 		eligible = pim.FilterEligibleActive(eligible, active)
 

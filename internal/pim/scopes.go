@@ -226,9 +226,12 @@ func (c *Clients) ResolveScopeName(ctx context.Context, scope string) string {
 		return name
 	}
 
-	name := c.fetchScopeName(ctx, scope)
-	c.scopeNameSet(scope, name)
-	return name
+	val, _, _ := c.scopeNameFlight.Do(scope, func() (any, error) {
+		name := c.fetchScopeName(ctx, scope)
+		c.scopeNameSet(scope, name)
+		return name, nil
+	})
+	return val.(string)
 }
 
 // fetchScopeName queries the Azure API to get a display name for a scope.
