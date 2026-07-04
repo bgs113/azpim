@@ -13,34 +13,35 @@ import (
 // FetchMaxActivationDuration queries the role management policy to find the
 // maximum allowed activation duration for the given role at the given scope.
 // Results are cached in memory for the lifetime of the Clients instance.
-// Returns 0 if the maximum cannot be determined (non-fatal; callers should
-// fall back to a sensible default).
-func (c *Clients) FetchMaxActivationDuration(ctx context.Context, scope, roleDefID string) time.Duration {
+// Returns (0, nil) when no maximum is configured for the role.
+// Returns (0, err) on API or parse failures; callers should warn the user and
+// proceed without a duration cap.
+func (c *Clients) FetchMaxActivationDuration(ctx context.Context, scope, roleDefID string) (time.Duration, error) {
 	roleGUID := roleDefGUID(roleDefID)
 	cacheKey := roleGUID + "|" + scope
 
 	c.mu.Lock()
 	if d, ok := c.policyCache[cacheKey]; ok {
 		c.mu.Unlock()
-		return d
+		return d, nil
 	}
 	c.mu.Unlock()
 
-	result := c.fetchMaxActivationDuration(ctx, scope, roleGUID)
-
-	c.mu.Lock()
-	c.policyCache[cacheKey] = result
-	c.mu.Unlock()
-
-	return result
+	result, err := c.fetchMaxActivationDuration(ctx, scope, roleGUID)
+	if err == nil {
+		c.mu.Lock()
+		c.policyCache[cacheKey] = result
+		c.mu.Unlock()
+	}
+	return result, err
 }
 
-func (c *Clients) fetchMaxActivationDuration(ctx context.Context, scope, roleGUID string) time.Duration {
+func (c *Clients) fetchMaxActivationDuration(ctx context.Context, scope, roleGUID string) (time.Duration, error) {
 	pager := c.PolicyAssignments.NewListForScopePager(scope, nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
-			return 0
+			return 0, fmt.Errorf("list policy assignments at scope %q: %w", scope, err)
 		}
 		for _, pa := range page.Value {
 			if pa == nil || pa.Properties == nil {
@@ -55,8 +56,11 @@ func (c *Clients) fetchMaxActivationDuration(ctx context.Context, scope, roleGUI
 			}
 			policyName := lastPathSegment(policyID)
 			resp, err := c.Policies.Get(ctx, scope, policyName, nil)
-			if err != nil || resp.Properties == nil {
-				return 0
+			if err != nil {
+				return 0, fmt.Errorf("get policy %q at scope %q: %w", policyName, scope, err)
+			}
+			if resp.Properties == nil {
+				return 0, fmt.Errorf("policy %q returned nil properties", policyName)
 			}
 			for _, ruleI := range resp.Properties.EffectiveRules {
 				if ruleI == nil {
@@ -72,17 +76,17 @@ func (c *Clients) fetchMaxActivationDuration(ctx context.Context, scope, roleGUI
 					continue
 				}
 				if rule.MaximumDuration == nil {
-					return 0
+					return 0, nil // policy exists but no max duration configured
 				}
 				d, err := parseISO8601Duration(*rule.MaximumDuration)
 				if err != nil {
-					return 0
+					return 0, fmt.Errorf("parse maximum duration %q: %w", *rule.MaximumDuration, err)
 				}
-				return d
+				return d, nil
 			}
 		}
 	}
-	return 0
+	return 0, nil // no matching policy assignment found — PIM not configured for this role
 }
 
 // parseISO8601Duration parses a subset of ISO 8601 duration strings as

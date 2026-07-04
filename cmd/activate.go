@@ -100,7 +100,10 @@ Examples:
 			return err
 		}
 
-		maxDur := clients.FetchMaxActivationDuration(ctx, selected.Scope, selected.RoleDefID)
+		maxDur, err := clients.FetchMaxActivationDuration(ctx, selected.Scope, selected.RoleDefID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not fetch policy maximum duration — no duration cap will be enforced\n")
+		}
 
 		dur, err := resolveDuration(activateDuration, maxDur)
 		if err != nil {
