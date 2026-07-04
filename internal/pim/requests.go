@@ -3,7 +3,6 @@ package pim
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
@@ -24,11 +23,6 @@ type ScheduleRequestEntry struct {
 	ExpiresAt      time.Time
 	HasExpiry      bool
 	RoleDefID      string
-}
-
-// IsPending reports whether the request is awaiting admin approval.
-func (r *ScheduleRequestEntry) IsPending() bool {
-	return r.Status == "Pending"
 }
 
 // ListRequests returns all role assignment schedule requests submitted by the
@@ -109,30 +103,23 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 
 	// Phase 2: resolve role names and scope names concurrently.
 	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
-	results := make([]ScheduleRequestEntry, len(raws))
-	var wg sync.WaitGroup
-	for i, r := range raws {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results[i] = ScheduleRequestEntry{
-				RequestName:    r.reqName,
-				RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
-				Scope:          r.scopeStr,
-				ScopeDisplay:   c.ResolveScopeName(ctx, r.scopeStr),
-				ResourceType:   resourceTypeFromScope(r.scopeStr),
-				RequestType:    r.requestType,
-				Status:         r.status,
-				Justification:  r.justification,
-				RequestedAt:    r.requestedAt,
-				HasRequestedAt: r.hasRequestedAt,
-				ExpiresAt:      r.expiresAt,
-				HasExpiry:      r.hasExpiry,
-				RoleDefID:      r.roleDefID,
-			}
-		}()
-	}
-	wg.Wait()
+	results := resolveConcurrently(raws, func(r raw) ScheduleRequestEntry {
+		return ScheduleRequestEntry{
+			RequestName:    r.reqName,
+			RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
+			Scope:          r.scopeStr,
+			ScopeDisplay:   c.ResolveScopeName(ctx, r.scopeStr),
+			ResourceType:   resourceTypeFromScope(r.scopeStr),
+			RequestType:    r.requestType,
+			Status:         r.status,
+			Justification:  r.justification,
+			RequestedAt:    r.requestedAt,
+			HasRequestedAt: r.hasRequestedAt,
+			ExpiresAt:      r.expiresAt,
+			HasExpiry:      r.hasExpiry,
+			RoleDefID:      r.roleDefID,
+		}
+	})
 	return results, nil
 }
 
@@ -141,28 +128,11 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 // configured, 403) are dropped when at least one scope succeeds. If every
 // scope fails the first error is returned.
 func (c *Clients) ListRequestsForScopes(ctx context.Context, scopes []string) ([]ScheduleRequestEntry, error) {
-	type result struct {
-		entries []ScheduleRequestEntry
-		err     error
-	}
-	ch := make(chan result, len(scopes))
-	for _, scope := range scopes {
-		go func() {
-			e, err := c.ListRequests(ctx, scope)
-			ch <- result{e, err}
-		}()
-	}
-	var all []ScheduleRequestEntry
-	var firstErr error
-	for range scopes {
-		r := <-ch
-		all = append(all, r.entries...)
-		if r.err != nil && firstErr == nil {
-			firstErr = r.err
-		}
-	}
-	if len(all) == 0 && firstErr != nil {
-		return nil, firstErr
+	all, err := fetchForScopes(scopes, func(scope string) ([]ScheduleRequestEntry, error) {
+		return c.ListRequests(ctx, scope)
+	})
+	if err != nil {
+		return nil, err
 	}
 	return deduplicateRequests(all), nil
 }

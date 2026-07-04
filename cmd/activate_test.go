@@ -57,28 +57,28 @@ func TestMatchEligible(t *testing.T) {
 	eligible := []pim.EligibleAssignment{contrib1, contrib2, owner, reader}
 
 	t.Run("exact match single result", func(t *testing.T) {
-		got := matchEligible(eligible, "Owner")
+		got := matchByRoleName(eligible, "Owner", eligibleName)
 		if len(got) != 1 || got[0].RoleName != "Owner" {
 			t.Errorf("got %v, want [Owner]", roleNames(got))
 		}
 	})
 
 	t.Run("exact match case insensitive", func(t *testing.T) {
-		got := matchEligible(eligible, "owner")
+		got := matchByRoleName(eligible, "owner", eligibleName)
 		if len(got) != 1 || got[0].RoleName != "Owner" {
 			t.Errorf("got %v, want [Owner]", roleNames(got))
 		}
 	})
 
 	t.Run("exact match multiple scopes", func(t *testing.T) {
-		got := matchEligible(eligible, "Contributor")
+		got := matchByRoleName(eligible, "Contributor", eligibleName)
 		if len(got) != 2 {
 			t.Errorf("got %d matches, want 2", len(got))
 		}
 	})
 
 	t.Run("prefix match fallback", func(t *testing.T) {
-		got := matchEligible(eligible, "Storage")
+		got := matchByRoleName(eligible, "Storage", eligibleName)
 		if len(got) != 1 || got[0].RoleName != "Storage Blob Data Reader" {
 			t.Errorf("got %v, want [Storage Blob Data Reader]", roleNames(got))
 		}
@@ -88,19 +88,21 @@ func TestMatchEligible(t *testing.T) {
 		// "Owner" exact-matches "Owner" and is also a prefix of nothing else here,
 		// but adding "Owner Extended" checks that exact takes priority.
 		ownerExt := newEntry("Owner Extended", "guid-ownerext", "/subscriptions/sub1", "Direct")
-		got := matchEligible(append(eligible, ownerExt), "Owner")
+		got := matchByRoleName(append(eligible, ownerExt), "Owner", eligibleName)
 		if len(got) != 1 || got[0].RoleName != "Owner" {
 			t.Errorf("got %v, want exact [Owner] only", roleNames(got))
 		}
 	})
 
 	t.Run("no match returns empty", func(t *testing.T) {
-		got := matchEligible(eligible, "NonExistent")
+		got := matchByRoleName(eligible, "NonExistent", eligibleName)
 		if len(got) != 0 {
 			t.Errorf("got %v, want empty", roleNames(got))
 		}
 	})
 }
+
+func eligibleName(a pim.EligibleAssignment) string { return a.RoleName }
 
 func roleNames(assignments []pim.EligibleAssignment) []string {
 	names := make([]string, len(assignments))

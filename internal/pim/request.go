@@ -30,32 +30,9 @@ type ActivationOutcome struct {
 // Activate creates a SelfActivate role assignment schedule request.
 func (c *Clients) Activate(ctx context.Context, opts ActivateOptions) (ActivationOutcome, error) {
 	reqName := uuid.New().String()
-
 	iso := durationToISO8601(opts.Duration)
-	reqType := armauthorization.RequestTypeSelfActivate
-	justification := opts.Justification
 
-	req := armauthorization.RoleAssignmentScheduleRequest{
-		Properties: &armauthorization.RoleAssignmentScheduleRequestProperties{
-			RoleDefinitionID: &opts.RoleDefID,
-			PrincipalID:      &opts.PrincipalID,
-			RequestType:      &reqType,
-			ScheduleInfo: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfo{
-				Expiration: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfoExpiration{
-					Duration: &iso,
-					Type:     ptrExpirationTypeAfterDuration(),
-				},
-			},
-			Justification: &justification,
-		},
-	}
-
-	if opts.TicketNumber != "" || opts.TicketSystem != "" {
-		req.Properties.TicketInfo = &armauthorization.RoleAssignmentScheduleRequestPropertiesTicketInfo{
-			TicketNumber: &opts.TicketNumber,
-			TicketSystem: &opts.TicketSystem,
-		}
-	}
+	req := buildScheduleRequest(armauthorization.RequestTypeSelfActivate, opts.RoleDefID, opts.PrincipalID, &iso, opts.Justification, opts.TicketNumber, opts.TicketSystem)
 
 	resp, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
 	if err != nil {
@@ -86,15 +63,8 @@ type DeactivateOptions struct {
 // Deactivate creates a SelfDeactivate role assignment schedule request.
 func (c *Clients) Deactivate(ctx context.Context, opts DeactivateOptions) error {
 	reqName := uuid.New().String()
-	reqType := armauthorization.RequestTypeSelfDeactivate
 
-	req := armauthorization.RoleAssignmentScheduleRequest{
-		Properties: &armauthorization.RoleAssignmentScheduleRequestProperties{
-			RoleDefinitionID: &opts.RoleDefID,
-			PrincipalID:      &opts.PrincipalID,
-			RequestType:      &reqType,
-		},
-	}
+	req := buildScheduleRequest(armauthorization.RequestTypeSelfDeactivate, opts.RoleDefID, opts.PrincipalID, nil, "", "", "")
 
 	_, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
 	if err != nil {
@@ -118,32 +88,9 @@ type ExtendOptions struct {
 // duration from the current time on an already-active assignment.
 func (c *Clients) Extend(ctx context.Context, opts ExtendOptions) error {
 	reqName := uuid.New().String()
-
 	iso := durationToISO8601(opts.Duration)
-	reqType := armauthorization.RequestTypeSelfExtend
-	justification := opts.Justification
 
-	req := armauthorization.RoleAssignmentScheduleRequest{
-		Properties: &armauthorization.RoleAssignmentScheduleRequestProperties{
-			RoleDefinitionID: &opts.RoleDefID,
-			PrincipalID:      &opts.PrincipalID,
-			RequestType:      &reqType,
-			ScheduleInfo: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfo{
-				Expiration: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfoExpiration{
-					Duration: &iso,
-					Type:     ptrExpirationTypeAfterDuration(),
-				},
-			},
-			Justification: &justification,
-		},
-	}
-
-	if opts.TicketNumber != "" || opts.TicketSystem != "" {
-		req.Properties.TicketInfo = &armauthorization.RoleAssignmentScheduleRequestPropertiesTicketInfo{
-			TicketNumber: &opts.TicketNumber,
-			TicketSystem: &opts.TicketSystem,
-		}
-	}
+	req := buildScheduleRequest(armauthorization.RequestTypeSelfExtend, opts.RoleDefID, opts.PrincipalID, &iso, opts.Justification, opts.TicketNumber, opts.TicketSystem)
 
 	_, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
 	if err != nil {
@@ -169,7 +116,36 @@ func durationToISO8601(d time.Duration) string {
 	}
 }
 
-func ptrExpirationTypeAfterDuration() *armauthorization.Type {
-	t := armauthorization.TypeAfterDuration
-	return &t
+// buildScheduleRequest constructs a RoleAssignmentScheduleRequest shared by
+// Activate, Deactivate, and Extend. iso is nil for Deactivate, which has no
+// schedule/justification. TicketInfo is set only when a ticket number or
+// system is provided.
+func buildScheduleRequest(reqType armauthorization.RequestType, roleDefID, principalID string, iso *string, justification, ticketNumber, ticketSystem string) armauthorization.RoleAssignmentScheduleRequest {
+	req := armauthorization.RoleAssignmentScheduleRequest{
+		Properties: &armauthorization.RoleAssignmentScheduleRequestProperties{
+			RoleDefinitionID: &roleDefID,
+			PrincipalID:      &principalID,
+			RequestType:      &reqType,
+		},
+	}
+
+	if iso != nil {
+		t := armauthorization.TypeAfterDuration
+		req.Properties.ScheduleInfo = &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfo{
+			Expiration: &armauthorization.RoleAssignmentScheduleRequestPropertiesScheduleInfoExpiration{
+				Duration: iso,
+				Type:     &t,
+			},
+		}
+		req.Properties.Justification = &justification
+	}
+
+	if ticketNumber != "" || ticketSystem != "" {
+		req.Properties.TicketInfo = &armauthorization.RoleAssignmentScheduleRequestPropertiesTicketInfo{
+			TicketNumber: &ticketNumber,
+			TicketSystem: &ticketSystem,
+		}
+	}
+
+	return req
 }

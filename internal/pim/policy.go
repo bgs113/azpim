@@ -3,6 +3,7 @@ package pim
 import (
 	"context"
 	"fmt"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -54,7 +55,7 @@ func (c *Clients) fetchMaxActivationDuration(ctx context.Context, scope, roleGUI
 			if policyID == "" {
 				continue
 			}
-			policyName := lastPathSegment(policyID)
+			policyName := path.Base(policyID)
 			resp, err := c.Policies.Get(ctx, scope, policyName, nil)
 			if err != nil {
 				return 0, fmt.Errorf("get policy %q at scope %q: %w", policyName, scope, err)

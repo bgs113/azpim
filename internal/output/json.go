@@ -103,7 +103,7 @@ type requestJSON struct {
 func PrintRequestsJSON(w io.Writer, requests []pim.ScheduleRequestEntry, pendingOnly bool) error {
 	out := make([]requestJSON, 0, len(requests))
 	for _, r := range requests {
-		if pendingOnly && !r.IsPending() {
+		if pendingOnly && r.Status != "Pending" {
 			continue
 		}
 		j := requestJSON{

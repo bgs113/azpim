@@ -40,7 +40,7 @@ func TestRoleDefDiskCacheExpired(t *testing.T) {
 	// Write a cache file with an old timestamp.
 	stale := roleDefCacheFile{
 		FetchedAt: time.Now().Add(-25 * time.Hour),
-		Entries:   []roleDefEntryJSON{{RoleDefID: "/providers/foo", DisplayName: "Foo"}},
+		Entries:   map[string]string{"/providers/foo": "Foo"},
 	}
 	data, _ := json.Marshal(stale)
 	_ = os.WriteFile(path, data, 0600)

@@ -11,6 +11,7 @@ import (
 	"azpim/internal/pim"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
@@ -163,4 +164,45 @@ func resolveScopes(ctx context.Context, clients *pim.Clients, cred azcore.TokenC
 func addOutputFlags(cmd *cobra.Command, flags *outputFlags) {
 	cmd.Flags().StringVarP(&flags.Format, "output", "o", "table", `Output format: "table" or "json"`)
 	cmd.Flags().BoolVar(&flags.HumanReadable, "human", false, `Use human-readable time remaining format (e.g. "1h 32m 5s")`)
+}
+
+// matchByRoleName returns items whose name exactly matches roleFlag
+// (case-insensitive), falling back to a case-insensitive prefix match.
+func matchByRoleName[T any](items []T, roleFlag string, name func(T) string) []T {
+	var exact []T
+	for _, a := range items {
+		if strings.EqualFold(name(a), roleFlag) {
+			exact = append(exact, a)
+		}
+	}
+	if len(exact) > 0 {
+		return exact
+	}
+	var prefix []T
+	for _, a := range items {
+		if strings.HasPrefix(strings.ToLower(name(a)), strings.ToLower(roleFlag)) {
+			prefix = append(prefix, a)
+		}
+	}
+	return prefix
+}
+
+// pickByLabel prompts the user to select one of items via promptui, using
+// itemLabel to render each row.
+func pickByLabel[T any](items []T, label string, itemLabel func(T) string) (T, error) {
+	labels := make([]string, len(items))
+	for i, a := range items {
+		labels[i] = itemLabel(a)
+	}
+	prompt := promptui.Select{
+		Label: label,
+		Items: labels,
+		Size:  15,
+	}
+	idx, _, err := prompt.Run()
+	if err != nil {
+		var zero T
+		return zero, fmt.Errorf("selection cancelled")
+	}
+	return items[idx], nil
 }

@@ -45,6 +45,20 @@ func stateColor(state string) string {
 	}
 }
 
+// appendRow appends row to t, printing any error to w rather than failing.
+func appendRow(w io.Writer, t *tablewriter.Table, row []string) {
+	if err := t.Append(row); err != nil {
+		fmt.Fprintf(w, "error appending row: %v\n", err)
+	}
+}
+
+// renderTable renders t to its writer, printing any error to w rather than failing.
+func renderTable(w io.Writer, t *tablewriter.Table) {
+	if err := t.Render(); err != nil {
+		fmt.Fprintf(w, "error rendering table: %v\n", err)
+	}
+}
+
 // borderlessRendition returns a Rendition with no outer borders but a header separator.
 func borderlessRendition() tw.Rendition {
 	return tw.Rendition{
@@ -89,20 +103,16 @@ func PrintEligibleTable(w io.Writer, assignments []pim.EligibleAssignment) {
 		if cond == "" {
 			cond = "-"
 		}
-		if err := t.Append([]string{
+		appendRow(w, t, []string{
 			a.RoleName,
 			a.ScopeDisplay,
 			a.ResourceType,
 			a.MembershipType,
 			cond,
 			end,
-		}); err != nil {
-			fmt.Fprintf(w, "error appending row: %v\n", err)
-		}
+		})
 	}
-	if err := t.Render(); err != nil {
-		fmt.Fprintf(w, "error rendering table: %v\n", err)
-	}
+	renderTable(w, t)
 }
 
 // PrintActiveTable writes active assignments as an aligned table to w.
@@ -138,7 +148,7 @@ func PrintActiveTable(w io.Writer, assignments []pim.ActiveAssignment, humanRead
 		if cond == "" {
 			cond = "-"
 		}
-		if err := t.Append([]string{
+		appendRow(w, t, []string{
 			a.RoleName,
 			a.Resource,
 			a.ResourceType,
@@ -147,13 +157,9 @@ func PrintActiveTable(w io.Writer, assignments []pim.ActiveAssignment, humanRead
 			stateColor(a.State),
 			end,
 			a.TimeRemaining(humanReadable),
-		}); err != nil {
-			fmt.Fprintf(w, "error appending row: %v\n", err)
-		}
+		})
 	}
-	if err := t.Render(); err != nil {
-		fmt.Fprintf(w, "error rendering table: %v\n", err)
-	}
+	renderTable(w, t)
 }
 
 // PrintRequestsTable writes schedule requests as an aligned table to w.
@@ -161,7 +167,7 @@ func PrintActiveTable(w io.Writer, assignments []pim.ActiveAssignment, humanRead
 func PrintRequestsTable(w io.Writer, requests []pim.ScheduleRequestEntry, pendingOnly bool) {
 	var rows []pim.ScheduleRequestEntry
 	for _, r := range requests {
-		if pendingOnly && !r.IsPending() {
+		if pendingOnly && r.Status != "Pending" {
 			continue
 		}
 		rows = append(rows, r)
@@ -196,7 +202,7 @@ func PrintRequestsTable(w io.Writer, requests []pim.ScheduleRequestEntry, pendin
 		if just == "" {
 			just = "-"
 		}
-		if err := t.Append([]string{
+		appendRow(w, t, []string{
 			r.RoleName,
 			r.ScopeDisplay,
 			r.RequestType,
@@ -204,13 +210,9 @@ func PrintRequestsTable(w io.Writer, requests []pim.ScheduleRequestEntry, pendin
 			requested,
 			expires,
 			just,
-		}); err != nil {
-			fmt.Fprintf(w, "error appending row: %v\n", err)
-		}
+		})
 	}
-	if err := t.Render(); err != nil {
-		fmt.Fprintf(w, "error rendering table: %v\n", err)
-	}
+	renderTable(w, t)
 }
 
 func requestStatusColor(status string) string {

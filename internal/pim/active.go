@@ -3,7 +3,6 @@ package pim
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
@@ -158,28 +157,21 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 
 	// Phase 2: resolve role names and scope names concurrently.
 	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
-	results := make([]ActiveAssignment, len(raws))
-	var wg sync.WaitGroup
-	for i, r := range raws {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results[i] = ActiveAssignment{
-				RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
-				Resource:       c.ResolveScopeName(ctx, r.scopeStr),
-				ResourceType:   resourceTypeFromScope(r.scopeStr),
-				MembershipType: r.membership,
-				Condition:      r.condition,
-				State:          r.state,
-				EndTime:        r.end,
-				HasExpiry:      r.hasExpiry,
-				Scope:          r.scopeStr,
-				RoleDefID:      r.roleDefID,
-				AssignmentType: r.assignmentType,
-			}
-		}()
-	}
-	wg.Wait()
+	results := resolveConcurrently(raws, func(r raw) ActiveAssignment {
+		return ActiveAssignment{
+			RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
+			Resource:       c.ResolveScopeName(ctx, r.scopeStr),
+			ResourceType:   resourceTypeFromScope(r.scopeStr),
+			MembershipType: r.membership,
+			Condition:      r.condition,
+			State:          r.state,
+			EndTime:        r.end,
+			HasExpiry:      r.hasExpiry,
+			Scope:          r.scopeStr,
+			RoleDefID:      r.roleDefID,
+			AssignmentType: r.assignmentType,
+		}
+	})
 	return results, nil
 }
 
@@ -188,28 +180,11 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 // errors (e.g. PIM not configured, 403) are dropped when at least one scope
 // succeeds. If every scope fails the first error is returned.
 func (c *Clients) ListActiveForScopes(ctx context.Context, scopes []string, includePermanent bool) ([]ActiveAssignment, error) {
-	type result struct {
-		assignments []ActiveAssignment
-		err         error
-	}
-	ch := make(chan result, len(scopes))
-	for _, scope := range scopes {
-		go func() {
-			a, err := c.ListActive(ctx, scope, includePermanent)
-			ch <- result{a, err}
-		}()
-	}
-	var all []ActiveAssignment
-	var firstErr error
-	for range scopes {
-		r := <-ch
-		all = append(all, r.assignments...)
-		if r.err != nil && firstErr == nil {
-			firstErr = r.err
-		}
-	}
-	if len(all) == 0 && firstErr != nil {
-		return nil, firstErr
+	all, err := fetchForScopes(scopes, func(scope string) ([]ActiveAssignment, error) {
+		return c.ListActive(ctx, scope, includePermanent)
+	})
+	if err != nil {
+		return nil, err
 	}
 	return deduplicateActive(all), nil
 }
@@ -218,25 +193,8 @@ func (c *Clients) ListActiveForScopes(ctx context.Context, scopes []string, incl
 // two-pass strategy as deduplicateEligible: Group entries win over shadow
 // Direct entries regardless of the order goroutines returned results.
 func deduplicateActive(in []ActiveAssignment) []ActiveAssignment {
-	hasGroup := make(map[string]struct{}, len(in))
-	for _, a := range in {
-		if a.MembershipType == "Group" {
-			hasGroup[roleDefGUID(a.RoleDefID)+"|"+normalizeScope(a.Scope)] = struct{}{}
-		}
-	}
-
-	seen := make(map[string]struct{}, len(in))
-	out := make([]ActiveAssignment, 0, len(in))
-	for _, a := range in {
-		key := roleDefGUID(a.RoleDefID) + "|" + normalizeScope(a.Scope)
-		if _, ok := hasGroup[key]; ok && a.MembershipType != "Group" {
-			continue
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, a)
-	}
-	return out
+	return dedupeGroupWins(in,
+		func(a ActiveAssignment) string { return a.MembershipType },
+		func(a ActiveAssignment) string { return roleDefGUID(a.RoleDefID) + "|" + normalizeScope(a.Scope) },
+	)
 }

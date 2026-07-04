@@ -161,54 +161,20 @@ func init() {
 // multiple assignments at different scopes, the user is prompted to disambiguate.
 func selectEligible(eligible []pim.EligibleAssignment, roleFlag string) (pim.EligibleAssignment, error) {
 	if roleFlag != "" {
-		matches := matchEligible(eligible, roleFlag)
+		matches := matchByRoleName(eligible, roleFlag, func(a pim.EligibleAssignment) string { return a.RoleName })
 		if len(matches) == 0 {
 			return pim.EligibleAssignment{}, fmt.Errorf("no eligible role matching %q found", roleFlag)
 		}
 		if len(matches) == 1 {
 			return matches[0], nil
 		}
-		return pickEligible(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag))
+		return pickByLabel(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag), eligibleLabel)
 	}
-	return pickEligible(eligible, "Select eligible role to activate")
+	return pickByLabel(eligible, "Select eligible role to activate", eligibleLabel)
 }
 
-func matchEligible(eligible []pim.EligibleAssignment, roleFlag string) []pim.EligibleAssignment {
-	// Exact match first.
-	var exact []pim.EligibleAssignment
-	for _, a := range eligible {
-		if strings.EqualFold(a.RoleName, roleFlag) {
-			exact = append(exact, a)
-		}
-	}
-	if len(exact) > 0 {
-		return exact
-	}
-	// Prefix match fallback.
-	var prefix []pim.EligibleAssignment
-	for _, a := range eligible {
-		if strings.HasPrefix(strings.ToLower(a.RoleName), strings.ToLower(roleFlag)) {
-			prefix = append(prefix, a)
-		}
-	}
-	return prefix
-}
-
-func pickEligible(eligible []pim.EligibleAssignment, label string) (pim.EligibleAssignment, error) {
-	labels := make([]string, len(eligible))
-	for i, a := range eligible {
-		labels[i] = fmt.Sprintf("%-40s  %s", a.RoleName, a.ScopeDisplay)
-	}
-	prompt := promptui.Select{
-		Label: label,
-		Items: labels,
-		Size:  15,
-	}
-	idx, _, err := prompt.Run()
-	if err != nil {
-		return pim.EligibleAssignment{}, fmt.Errorf("selection cancelled")
-	}
-	return eligible[idx], nil
+func eligibleLabel(a pim.EligibleAssignment) string {
+	return fmt.Sprintf("%-40s  %s", a.RoleName, a.ScopeDisplay)
 }
 
 // resolveDuration parses the --duration flag or prompts the user.

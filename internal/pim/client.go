@@ -32,9 +32,9 @@ type Clients struct {
 	Subscriptions     *armsubscriptions.Client
 	ManagementGroups  *armmanagementgroups.Client
 	cred              azcore.TokenCredential
-	mu               sync.Mutex
-	roleDefFlight    singleflight.Group
-	scopeNameFlight  singleflight.Group
+	mu                sync.Mutex
+	roleDefFlight     singleflight.Group
+	scopeNameFlight   singleflight.Group
 	// roleDefCache caches role definition display names keyed by their full ARM ID.
 	roleDefCache map[string]string
 	// scopeNameCache caches human-readable display names keyed by ARM scope string.
@@ -222,4 +222,21 @@ func PtrString(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// resolveConcurrently applies build to every element of raws in parallel,
+// preserving order. Used to fan out ResolveRoleName/ResolveScopeName lookups
+// (which singleflight-coalesce duplicate calls) across a page of results.
+func resolveConcurrently[R any, T any](raws []R, build func(R) T) []T {
+	results := make([]T, len(raws))
+	var wg sync.WaitGroup
+	for i, r := range raws {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = build(r)
+		}()
+	}
+	wg.Wait()
+	return results
 }

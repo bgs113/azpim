@@ -108,8 +108,8 @@ func TestScheduleRequestEntryIsPending(t *testing.T) {
 	}
 	for _, tt := range tests {
 		r := ScheduleRequestEntry{Status: tt.status}
-		if got := r.IsPending(); got != tt.want {
-			t.Errorf("IsPending() with status %q = %v, want %v", tt.status, got, tt.want)
+		if got := r.Status == "Pending"; got != tt.want {
+			t.Errorf("Status==%q: got %v, want %v", tt.status, got, tt.want)
 		}
 	}
 }

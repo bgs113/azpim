@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -14,13 +15,8 @@ import (
 const scopeCacheTTL = 5 * time.Minute
 
 type scopeCacheFile struct {
-	FetchedAt time.Time        `json:"fetched_at"`
-	Entries   []scopeEntryJSON `json:"entries"`
-}
-
-type scopeEntryJSON struct {
-	Scope       string `json:"scope"`
-	DisplayName string `json:"display_name"`
+	FetchedAt time.Time    `json:"fetched_at"`
+	Entries   []scopeEntry `json:"entries"`
 }
 
 func scopeCachePath() (string, error) {
@@ -47,11 +43,7 @@ func loadScopeCache() ([]scopeEntry, bool) {
 	if time.Since(cf.FetchedAt) > scopeCacheTTL {
 		return nil, false
 	}
-	entries := make([]scopeEntry, len(cf.Entries))
-	for i, e := range cf.Entries {
-		entries[i] = scopeEntry{scope: e.Scope, displayName: e.DisplayName}
-	}
-	return entries, true
+	return cf.Entries, true
 }
 
 func saveScopeCache(entries []scopeEntry) {
@@ -62,11 +54,7 @@ func saveScopeCache(entries []scopeEntry) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return
 	}
-	je := make([]scopeEntryJSON, len(entries))
-	for i, e := range entries {
-		je[i] = scopeEntryJSON{Scope: e.scope, DisplayName: e.displayName}
-	}
-	data, err := json.Marshal(scopeCacheFile{FetchedAt: time.Now(), Entries: je})
+	data, err := json.Marshal(scopeCacheFile{FetchedAt: time.Now(), Entries: entries})
 	if err != nil {
 		return
 	}
@@ -89,8 +77,8 @@ func (c *Clients) ResolveSubscriptionID(ctx context.Context, nameOrID string) (s
 	}
 	lower := strings.ToLower(nameOrID)
 	for _, e := range entries {
-		if strings.ToLower(e.displayName) == lower {
-			return strings.TrimPrefix(e.scope, "/subscriptions/"), nil
+		if strings.ToLower(e.DisplayName) == lower {
+			return strings.TrimPrefix(e.Scope, "/subscriptions/"), nil
 		}
 	}
 	return "", fmt.Errorf("no subscription found with name %q", nameOrID)
@@ -98,8 +86,8 @@ func (c *Clients) ResolveSubscriptionID(ctx context.Context, nameOrID string) (s
 
 // scopeEntry pairs an ARM scope string with its human-readable display name.
 type scopeEntry struct {
-	scope       string
-	displayName string
+	Scope       string `json:"scope"`
+	DisplayName string `json:"display_name"`
 }
 
 // ListAccessibleScopes returns ARM scope strings for all subscriptions and
@@ -116,11 +104,11 @@ func (c *Clients) ListAccessibleScopes(ctx context.Context) ([]string, error) {
 	// Serve from disk cache if fresh.
 	if cached, ok := loadScopeCache(); ok {
 		for _, e := range cached {
-			c.scopeNameSet(e.scope, e.displayName)
+			c.scopeNameSet(e.Scope, e.DisplayName)
 		}
 		scopes := make([]string, len(cached))
 		for i, e := range cached {
-			scopes[i] = e.scope
+			scopes[i] = e.Scope
 		}
 		return scopes, nil
 	}
@@ -156,7 +144,7 @@ func (c *Clients) ListAccessibleScopes(ctx context.Context) ([]string, error) {
 		all = append(all, mgResult.entries...)
 	}
 	for _, e := range all {
-		c.scopeNameSet(e.scope, e.displayName)
+		c.scopeNameSet(e.Scope, e.DisplayName)
 	}
 
 	if len(all) == 0 {
@@ -167,7 +155,7 @@ func (c *Clients) ListAccessibleScopes(ctx context.Context) ([]string, error) {
 
 	scopes := make([]string, len(all))
 	for i, e := range all {
-		scopes[i] = e.scope
+		scopes[i] = e.Scope
 	}
 	return scopes, nil
 }
@@ -189,7 +177,7 @@ func (c *Clients) listSubscriptionEntries(ctx context.Context) ([]scopeEntry, er
 			if sub.DisplayName != nil && *sub.DisplayName != "" {
 				name = *sub.DisplayName
 			}
-			entries = append(entries, scopeEntry{scope: scope, displayName: name})
+			entries = append(entries, scopeEntry{Scope: scope, DisplayName: name})
 		}
 	}
 	return entries, nil
@@ -212,7 +200,7 @@ func (c *Clients) listManagementGroupEntries(ctx context.Context) ([]scopeEntry,
 			if mg.Properties != nil && mg.Properties.DisplayName != nil && *mg.Properties.DisplayName != "" {
 				name = *mg.Properties.DisplayName
 			}
-			entries = append(entries, scopeEntry{scope: scope, displayName: name})
+			entries = append(entries, scopeEntry{Scope: scope, DisplayName: name})
 		}
 	}
 	return entries, nil
@@ -265,15 +253,6 @@ func (c *Clients) fetchScopeName(ctx context.Context, scope string) string {
 	}
 
 	// Fallback: last meaningful path segment (resource name, RG name, etc.).
-	return lastPathSegment(scope)
+	return path.Base(scope)
 }
 
-// lastPathSegment returns the final non-empty segment of an ARM scope path.
-func lastPathSegment(scope string) string {
-	s := strings.TrimRight(scope, "/")
-	idx := strings.LastIndex(s, "/")
-	if idx < 0 {
-		return s
-	}
-	return s[idx+1:]
-}

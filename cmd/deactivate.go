@@ -10,7 +10,6 @@ import (
 
 	"azpim/internal/auth"
 	"azpim/internal/pim"
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
@@ -144,54 +143,20 @@ func init() {
 // multiple assignments at different scopes, the user is prompted to disambiguate.
 func selectActive(active []pim.ActiveAssignment, roleFlag string) (pim.ActiveAssignment, error) {
 	if roleFlag != "" {
-		matches := matchActive(active, roleFlag)
+		matches := matchByRoleName(active, roleFlag, func(a pim.ActiveAssignment) string { return a.RoleName })
 		if len(matches) == 0 {
 			return pim.ActiveAssignment{}, fmt.Errorf("no active role matching %q found", roleFlag)
 		}
 		if len(matches) == 1 {
 			return matches[0], nil
 		}
-		return pickActive(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag))
+		return pickByLabel(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag), activeLabel)
 	}
-	return pickActive(active, "Select active role to deactivate")
+	return pickByLabel(active, "Select active role to deactivate", activeLabel)
 }
 
-func matchActive(active []pim.ActiveAssignment, roleFlag string) []pim.ActiveAssignment {
-	// Exact match first.
-	var exact []pim.ActiveAssignment
-	for _, a := range active {
-		if strings.EqualFold(a.RoleName, roleFlag) {
-			exact = append(exact, a)
-		}
-	}
-	if len(exact) > 0 {
-		return exact
-	}
-	// Prefix match fallback.
-	var prefix []pim.ActiveAssignment
-	for _, a := range active {
-		if strings.HasPrefix(strings.ToLower(a.RoleName), strings.ToLower(roleFlag)) {
-			prefix = append(prefix, a)
-		}
-	}
-	return prefix
-}
-
-func pickActive(active []pim.ActiveAssignment, label string) (pim.ActiveAssignment, error) {
-	labels := make([]string, len(active))
-	for i, a := range active {
-		labels[i] = fmt.Sprintf("%-40s  %s  (%s remaining)", a.RoleName, a.Resource, a.TimeRemaining(false))
-	}
-	prompt := promptui.Select{
-		Label: label,
-		Items: labels,
-		Size:  15,
-	}
-	idx, _, err := prompt.Run()
-	if err != nil {
-		return pim.ActiveAssignment{}, fmt.Errorf("selection cancelled")
-	}
-	return active[idx], nil
+func activeLabel(a pim.ActiveAssignment) string {
+	return fmt.Sprintf("%-40s  %s  (%s remaining)", a.RoleName, a.Resource, a.TimeRemaining(false))
 }
 
 type deactivateResult struct {

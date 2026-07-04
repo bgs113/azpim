@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
@@ -84,26 +83,19 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 
 	// Phase 2: resolve role names and scope names concurrently.
 	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
-	results := make([]EligibleAssignment, len(raws))
-	var wg sync.WaitGroup
-	for i, r := range raws {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results[i] = EligibleAssignment{
-				RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
-				Scope:          r.scopeStr,
-				ScopeDisplay:   c.ResolveScopeName(ctx, r.scopeStr),
-				ResourceType:   resourceTypeFromScope(r.scopeStr),
-				MembershipType: r.membership,
-				Condition:      r.condition,
-				EndTime:        r.end,
-				HasExpiry:      r.hasExpiry,
-				RoleDefID:      r.roleDefID,
-			}
-		}()
-	}
-	wg.Wait()
+	results := resolveConcurrently(raws, func(r raw) EligibleAssignment {
+		return EligibleAssignment{
+			RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
+			Scope:          r.scopeStr,
+			ScopeDisplay:   c.ResolveScopeName(ctx, r.scopeStr),
+			ResourceType:   resourceTypeFromScope(r.scopeStr),
+			MembershipType: r.membership,
+			Condition:      r.condition,
+			EndTime:        r.end,
+			HasExpiry:      r.hasExpiry,
+			RoleDefID:      r.roleDefID,
+		}
+	})
 	return results, nil
 }
 
@@ -112,22 +104,35 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 // errors (e.g. PIM not configured, 403) are dropped when at least one scope
 // succeeds. If every scope fails the first error is returned.
 func (c *Clients) ListEligibleForScopes(ctx context.Context, scopes []string) ([]EligibleAssignment, error) {
+	all, err := fetchForScopes(scopes, func(scope string) ([]EligibleAssignment, error) {
+		return c.ListEligible(ctx, scope)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return deduplicateEligible(all), nil
+}
+
+// fetchForScopes calls fetch for every scope in parallel and combines the
+// results. Per-scope errors are dropped when at least one scope succeeds; if
+// every scope fails, the first error is returned.
+func fetchForScopes[T any](scopes []string, fetch func(scope string) ([]T, error)) ([]T, error) {
 	type result struct {
-		assignments []EligibleAssignment
-		err         error
+		items []T
+		err   error
 	}
 	ch := make(chan result, len(scopes))
 	for _, scope := range scopes {
 		go func() {
-			a, err := c.ListEligible(ctx, scope)
-			ch <- result{a, err}
+			items, err := fetch(scope)
+			ch <- result{items, err}
 		}()
 	}
-	var all []EligibleAssignment
+	var all []T
 	var firstErr error
 	for range scopes {
 		r := <-ch
-		all = append(all, r.assignments...)
+		all = append(all, r.items...)
 		if r.err != nil && firstErr == nil {
 			firstErr = r.err
 		}
@@ -135,7 +140,7 @@ func (c *Clients) ListEligibleForScopes(ctx context.Context, scopes []string) ([
 	if len(all) == 0 && firstErr != nil {
 		return nil, firstErr
 	}
-	return deduplicateEligible(all), nil
+	return all, nil
 }
 
 // FilterEligibleActive removes eligible assignments that are already active
@@ -169,32 +174,41 @@ func FilterEligibleActive(eligible []EligibleAssignment, active []ActiveAssignme
 //  2. When a group has an eligible assignment, Azure also creates a shadow
 //     "Direct" instance for every group member. The Azure Portal hides these
 //     shadows and shows only the Group entry.
-//
-// A two-pass approach is used so that Group always wins regardless of the
-// order goroutines returned their results (sort-then-dedup is fragile when
-// Group and Direct entries come back in a non-deterministic order).
 func deduplicateEligible(in []EligibleAssignment) []EligibleAssignment {
-	// Pass 1: record which (roleGUID, scope) keys have a Group assignment.
+	return dedupeGroupWins(in,
+		func(a EligibleAssignment) string { return a.MembershipType },
+		func(a EligibleAssignment) string { return roleDefGUID(a.RoleDefID) + "|" + normalizeScope(a.Scope) },
+	)
+}
+
+// dedupeGroupWins removes duplicates keyed by key, preferring a "Group"
+// membershipType entry over shadow "Direct" entries sharing the same key
+// (Azure creates a shadow Direct instance for every member of a group that
+// has an eligible/active assignment; the Portal hides these and shows only
+// the Group entry). A two-pass approach ensures Group always wins regardless
+// of the order concurrent fetches returned results in.
+func dedupeGroupWins[T any](in []T, membershipType func(T) string, key func(T) string) []T {
+	// Pass 1: record which keys have a Group entry.
 	hasGroup := make(map[string]struct{}, len(in))
 	for _, a := range in {
-		if a.MembershipType == "Group" {
-			hasGroup[roleDefGUID(a.RoleDefID)+"|"+normalizeScope(a.Scope)] = struct{}{}
+		if membershipType(a) == "Group" {
+			hasGroup[key(a)] = struct{}{}
 		}
 	}
 
 	// Pass 2: drop shadow Direct entries where a Group entry exists, then
-	// dedup the remainder so each (role, scope) appears at most once.
+	// dedup the remainder so each key appears at most once.
 	seen := make(map[string]struct{}, len(in))
-	out := make([]EligibleAssignment, 0, len(in))
+	out := make([]T, 0, len(in))
 	for _, a := range in {
-		key := roleDefGUID(a.RoleDefID) + "|" + normalizeScope(a.Scope)
-		if _, ok := hasGroup[key]; ok && a.MembershipType != "Group" {
-			continue // shadow Direct — a Group entry exists for this role+scope
+		k := key(a)
+		if _, ok := hasGroup[k]; ok && membershipType(a) != "Group" {
+			continue // shadow Direct — a Group entry exists for this key
 		}
-		if _, ok := seen[key]; ok {
+		if _, ok := seen[k]; ok {
 			continue
 		}
-		seen[key] = struct{}{}
+		seen[k] = struct{}{}
 		out = append(out, a)
 	}
 	return out
@@ -218,38 +232,15 @@ func normalizeScope(scope string) string {
 // resourceTypeFromScope derives a short resource type label from an ARM scope string.
 func resourceTypeFromScope(scope string) string {
 	switch {
-	case contains(scope, "/providers/Microsoft.Management/managementGroups"):
+	case strings.Contains(scope, "/providers/Microsoft.Management/managementGroups"):
 		return "Management group"
-	case countSlash(scope) == 2: // /subscriptions/{id}
+	case strings.Count(scope, "/") == 2: // /subscriptions/{id}
 		return "Subscription"
-	case contains(scope, "/resourceGroups/") && !contains(scope, "/providers/"):
+	case strings.Contains(scope, "/resourceGroups/") && !strings.Contains(scope, "/providers/"):
 		return "Resource group"
-	case contains(scope, "/providers/"):
+	case strings.Contains(scope, "/providers/"):
 		return "Resource"
 	default:
 		return ""
 	}
-}
-
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(s) > 0 && containsStr(s, sub))
-}
-
-func containsStr(s, sub string) bool {
-	for i := 0; i <= len(s)-len(sub); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
-		}
-	}
-	return false
-}
-
-func countSlash(s string) int {
-	n := 0
-	for _, c := range s {
-		if c == '/' {
-			n++
-		}
-	}
-	return n
 }

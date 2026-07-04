@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -44,7 +45,11 @@ func ResolveTokenClaim(ctx context.Context, cred azcore.TokenCredential, claim s
 		return "", fmt.Errorf("decode token payload: %w", err)
 	}
 
-	value := extractJSONStringValue(string(payload), claim)
+	var claims map[string]any
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", fmt.Errorf("decode token claims: %w", err)
+	}
+	value, _ := claims[claim].(string)
 	if value == "" {
 		return "", fmt.Errorf("%q claim not found in token", claim)
 	}
@@ -61,18 +66,3 @@ func ResolvePrincipalID(ctx context.Context, cred azcore.TokenCredential) (strin
 	return ResolveTokenClaim(ctx, cred, "oid")
 }
 
-// extractJSONStringValue extracts a string value for a key from a flat JSON object.
-func extractJSONStringValue(json, key string) string {
-	search := `"` + key + `":"`
-	idx := strings.Index(json, search)
-	if idx < 0 {
-		return ""
-	}
-	start := idx + len(search)
-	rest := json[start:]
-	before, _, ok := strings.Cut(rest, `"`)
-	if !ok {
-		return ""
-	}
-	return before
-}
