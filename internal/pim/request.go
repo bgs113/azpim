@@ -153,7 +153,10 @@ func (c *Clients) Extend(ctx context.Context, opts ExtendOptions) error {
 }
 
 // durationToISO8601 converts a Go duration to an ISO 8601 duration string.
+// Azure PIM does not support sub-minute granularity, so the duration is
+// rounded to the nearest minute before encoding.
 func durationToISO8601(d time.Duration) string {
+	d = d.Round(time.Minute)
 	h := int(d.Hours())
 	m := int(d.Minutes()) % 60
 	switch {
