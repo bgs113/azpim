@@ -3,6 +3,7 @@ package pim
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
@@ -71,7 +72,18 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 
 	pager := c.ActiveInstances.NewListForScopePager(scope, opts)
 
-	var results []ActiveAssignment
+	// Phase 1: page through the API collecting raw fields (no ARM name lookups).
+	type raw struct {
+		roleDefID      string
+		scopeStr       string
+		membership     string
+		condition      string
+		state          string
+		assignmentType string
+		end            time.Time
+		hasExpiry      bool
+	}
+	var raws []raw
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -93,9 +105,6 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 			if isPermanent && !includePermanent {
 				continue
 			}
-
-			roleDefID := PtrString(p.RoleDefinitionID)
-			roleName := c.ResolveRoleName(ctx, roleDefID)
 
 			membership := "Direct"
 			if p.MemberType != nil && *p.MemberType == armauthorization.MemberTypeGroup {
@@ -134,23 +143,43 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 				}
 			}
 
-			condition := PtrString(p.Condition)
-
-			results = append(results, ActiveAssignment{
-				RoleName:       roleName,
-				Resource:       c.ResolveScopeName(ctx, scopeStr),
-				ResourceType:   resourceTypeFromScope(scopeStr),
-				MembershipType: membership,
-				Condition:      condition,
-				State:          state,
-				EndTime:        end,
-				HasExpiry:      hasExpiry,
-				Scope:          scopeStr,
-				RoleDefID:      roleDefID,
-				AssignmentType: assignmentType,
+			raws = append(raws, raw{
+				roleDefID:      PtrString(p.RoleDefinitionID),
+				scopeStr:       scopeStr,
+				membership:     membership,
+				condition:      PtrString(p.Condition),
+				state:          state,
+				assignmentType: assignmentType,
+				end:            end,
+				hasExpiry:      hasExpiry,
 			})
 		}
 	}
+
+	// Phase 2: resolve role names and scope names concurrently.
+	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
+	results := make([]ActiveAssignment, len(raws))
+	var wg sync.WaitGroup
+	for i, r := range raws {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = ActiveAssignment{
+				RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
+				Resource:       c.ResolveScopeName(ctx, r.scopeStr),
+				ResourceType:   resourceTypeFromScope(r.scopeStr),
+				MembershipType: r.membership,
+				Condition:      r.condition,
+				State:          r.state,
+				EndTime:        r.end,
+				HasExpiry:      r.hasExpiry,
+				Scope:          r.scopeStr,
+				RoleDefID:      r.roleDefID,
+				AssignmentType: r.assignmentType,
+			}
+		}()
+	}
+	wg.Wait()
 	return results, nil
 }
 

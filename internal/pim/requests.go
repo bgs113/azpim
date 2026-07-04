@@ -3,6 +3,7 @@ package pim
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
@@ -40,7 +41,20 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 
 	pager := c.Requests.NewListForScopePager(scope, opts)
 
-	var results []ScheduleRequestEntry
+	// Phase 1: page through the API collecting raw fields (no ARM name lookups).
+	type raw struct {
+		reqName        string
+		roleDefID      string
+		scopeStr       string
+		requestType    string
+		status         string
+		justification  string
+		requestedAt    time.Time
+		hasRequestedAt bool
+		expiresAt      time.Time
+		hasExpiry      bool
+	}
+	var raws []raw
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -56,9 +70,6 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 			if req.Name != nil {
 				reqName = *req.Name
 			}
-
-			roleDefID := PtrString(p.RoleDefinitionID)
-			roleName := c.ResolveRoleName(ctx, roleDefID)
 
 			scopeStr := PtrString(p.Scope)
 			if scopeStr == "" {
@@ -81,23 +92,47 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 				}
 			}
 
-			results = append(results, ScheduleRequestEntry{
-				RequestName:    reqName,
-				RoleName:       roleName,
-				Scope:          scopeStr,
-				ScopeDisplay:   c.ResolveScopeName(ctx, scopeStr),
-				ResourceType:   resourceTypeFromScope(scopeStr),
-				RequestType:    humanizeRequestType(p.RequestType),
-				Status:         humanizeRequestStatus(p.Status),
-				Justification:  PtrString(p.Justification),
-				RequestedAt:    requestedAt,
-				HasRequestedAt: hasRequestedAt,
-				ExpiresAt:      expiresAt,
-				HasExpiry:      hasExpiry,
-				RoleDefID:      roleDefID,
+			raws = append(raws, raw{
+				reqName:        reqName,
+				roleDefID:      PtrString(p.RoleDefinitionID),
+				scopeStr:       scopeStr,
+				requestType:    humanizeRequestType(p.RequestType),
+				status:         humanizeRequestStatus(p.Status),
+				justification:  PtrString(p.Justification),
+				requestedAt:    requestedAt,
+				hasRequestedAt: hasRequestedAt,
+				expiresAt:      expiresAt,
+				hasExpiry:      hasExpiry,
 			})
 		}
 	}
+
+	// Phase 2: resolve role names and scope names concurrently.
+	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
+	results := make([]ScheduleRequestEntry, len(raws))
+	var wg sync.WaitGroup
+	for i, r := range raws {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = ScheduleRequestEntry{
+				RequestName:    r.reqName,
+				RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
+				Scope:          r.scopeStr,
+				ScopeDisplay:   c.ResolveScopeName(ctx, r.scopeStr),
+				ResourceType:   resourceTypeFromScope(r.scopeStr),
+				RequestType:    r.requestType,
+				Status:         r.status,
+				Justification:  r.justification,
+				RequestedAt:    r.requestedAt,
+				HasRequestedAt: r.hasRequestedAt,
+				ExpiresAt:      r.expiresAt,
+				HasExpiry:      r.hasExpiry,
+				RoleDefID:      r.roleDefID,
+			}
+		}()
+	}
+	wg.Wait()
 	return results, nil
 }
 

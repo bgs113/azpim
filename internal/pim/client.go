@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
@@ -38,6 +39,8 @@ type Clients struct {
 	roleDefCache map[string]string
 	// scopeNameCache caches human-readable display names keyed by ARM scope string.
 	scopeNameCache map[string]string
+	// policyCache caches FetchMaxActivationDuration results keyed by "roleGUID|scope".
+	policyCache map[string]time.Duration
 }
 
 // NewClients creates authorization clients. The v3 beta SDK takes no
@@ -104,6 +107,7 @@ func NewClients(cred azcore.TokenCredential) (*Clients, error) {
 			return make(map[string]string)
 		}(),
 		scopeNameCache: make(map[string]string),
+		policyCache:    make(map[string]time.Duration),
 	}, nil
 }
 

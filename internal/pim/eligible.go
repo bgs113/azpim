@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
@@ -32,7 +33,16 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 
 	pager := c.EligibleInstances.NewListForScopePager(scope, opts)
 
-	var results []EligibleAssignment
+	// Phase 1: page through the API collecting raw fields (no ARM name lookups).
+	type raw struct {
+		roleDefID  string
+		scopeStr   string
+		membership string
+		condition  string
+		end        time.Time
+		hasExpiry  bool
+	}
+	var raws []raw
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -43,9 +53,6 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 				continue
 			}
 			p := inst.Properties
-
-			roleDefID := PtrString(p.RoleDefinitionID)
-			roleName := c.ResolveRoleName(ctx, roleDefID)
 
 			membership := "Direct"
 			if p.MemberType != nil && *p.MemberType == armauthorization.MemberTypeGroup {
@@ -64,19 +71,39 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 				scopeStr = scope
 			}
 
-			results = append(results, EligibleAssignment{
-				RoleName:       roleName,
-				Scope:          scopeStr,
-				ScopeDisplay:   c.ResolveScopeName(ctx, scopeStr),
-				ResourceType:   resourceTypeFromScope(scopeStr),
-				MembershipType: membership,
-				Condition:      PtrString(p.Condition),
-				EndTime:        end,
-				HasExpiry:      hasExpiry,
-				RoleDefID:      roleDefID,
+			raws = append(raws, raw{
+				roleDefID:  PtrString(p.RoleDefinitionID),
+				scopeStr:   scopeStr,
+				membership: membership,
+				condition:  PtrString(p.Condition),
+				end:        end,
+				hasExpiry:  hasExpiry,
 			})
 		}
 	}
+
+	// Phase 2: resolve role names and scope names concurrently.
+	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
+	results := make([]EligibleAssignment, len(raws))
+	var wg sync.WaitGroup
+	for i, r := range raws {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results[i] = EligibleAssignment{
+				RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
+				Scope:          r.scopeStr,
+				ScopeDisplay:   c.ResolveScopeName(ctx, r.scopeStr),
+				ResourceType:   resourceTypeFromScope(r.scopeStr),
+				MembershipType: r.membership,
+				Condition:      r.condition,
+				EndTime:        r.end,
+				HasExpiry:      r.hasExpiry,
+				RoleDefID:      r.roleDefID,
+			}
+		}()
+	}
+	wg.Wait()
 	return results, nil
 }
 

@@ -12,11 +12,30 @@ import (
 
 // FetchMaxActivationDuration queries the role management policy to find the
 // maximum allowed activation duration for the given role at the given scope.
+// Results are cached in memory for the lifetime of the Clients instance.
 // Returns 0 if the maximum cannot be determined (non-fatal; callers should
 // fall back to a sensible default).
 func (c *Clients) FetchMaxActivationDuration(ctx context.Context, scope, roleDefID string) time.Duration {
 	roleGUID := roleDefGUID(roleDefID)
+	cacheKey := roleGUID + "|" + scope
 
+	c.mu.Lock()
+	if d, ok := c.policyCache[cacheKey]; ok {
+		c.mu.Unlock()
+		return d
+	}
+	c.mu.Unlock()
+
+	result := c.fetchMaxActivationDuration(ctx, scope, roleGUID)
+
+	c.mu.Lock()
+	c.policyCache[cacheKey] = result
+	c.mu.Unlock()
+
+	return result
+}
+
+func (c *Clients) fetchMaxActivationDuration(ctx context.Context, scope, roleGUID string) time.Duration {
 	pager := c.PolicyAssignments.NewListForScopePager(scope, nil)
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
