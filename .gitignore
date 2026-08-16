@@ -14,3 +14,9 @@ coverage.out
 
 # Windows
 Thumbs.db
+
+# local AI tooling (not published)
+/CLAUDE.md
+/AGENTS.md
+/.claude/
+/graphify-out/

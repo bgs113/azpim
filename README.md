@@ -9,47 +9,25 @@ A CLI tool for managing Azure Privileged Identity Management (PIM) role assignme
 
 ## Installation
 
-Pre-built binaries are available from two sources — download the ZIP for your platform from either:
+Pre-built binaries are available from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest). Each release also includes a `checksums.txt` file with SHA256 hashes and an `.sbom.json` SPDX software bill of materials for each archive.
 
-- **[GitHub Releases](https://github.com/bgs113/azpim/releases/latest)** — public, no authentication required
-- **SharePoint** — requires authentication; use your web browser (`curl`/`wget` won't work)
-
-Each GitHub Release also includes a `checksums.txt` file with SHA256 hashes and an `.sbom.json` SPDX software bill of materials for each archive.
-
-### macOS
-
-Install using the [GitHub CLI](https://cli.github.com/) (`gh`), which handles private repo auth automatically.
-
-Add the following to `~/.zshrc`, then run `source ~/.zshrc`:
+### macOS (Homebrew)
 
 ```bash
-export PATH="$HOME/.local/bin:$PATH"
-
-azpim-update() {
-  local arch tmp
-  arch=$(uname -m); [[ "$arch" == "arm64" ]] || arch="amd64"
-  tmp=$(mktemp -d)
-  gh release download --repo bgs113/azpim --pattern "*-darwin-${arch}.zip" --dir "$tmp"
-  unzip -q "$tmp"/*.zip azpim -d "$tmp"
-  mkdir -p ~/.local/bin && install -m 755 "$tmp/azpim" ~/.local/bin/azpim
-  rm -rf "$tmp"
-  ~/.local/bin/azpim --version
-}
+brew install --cask bgs113/tap/azpim
 ```
 
-Then install or update with:
+Update with:
 
 ```bash
-azpim-update
+brew upgrade --cask azpim
 ```
 
 > **Gatekeeper prompt**: If macOS blocks the binary on first run, go to **System Settings → Privacy & Security** and click **Allow Anyway**, or clear the quarantine attribute:
 >
 > ```bash
-> xattr -dr com.apple.quarantine ~/.local/bin/azpim
+> xattr -dr com.apple.quarantine "$(which azpim)"
 > ```
-
-> **Homebrew:** A cask is published to `bgs113/homebrew-tap` with each release and will be installable via `brew install --cask azpim` if the repository is made public.
 
 ### macOS (ZIP download)
 
@@ -89,7 +67,7 @@ source ~/.zshrc
 
 ### Linux
 
-Download the ZIP for your architecture from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest) or SharePoint:
+Download the ZIP for your architecture from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest):
 
 | Architecture | File                            |
 | ------------ | ------------------------------- |
@@ -113,7 +91,7 @@ source ~/.bashrc
 
 ### Windows
 
-Download `azpim-vX.Y.Z-windows-amd64.zip` from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest) or SharePoint.
+Download `azpim-vX.Y.Z-windows-amd64.zip` from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest).
 
 Extract the ZIP — in File Explorer: right-click → **Extract All**, or in PowerShell
 (replace `X.Y.Z` with the version you downloaded):
