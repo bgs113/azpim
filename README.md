@@ -14,20 +14,14 @@ Pre-built binaries are available from [GitHub Releases](https://github.com/bgs11
 ### macOS (Homebrew)
 
 ```bash
-brew install --cask bgs113/tap/azpim
+brew install bgs113/tap/azpim
 ```
 
 Update with:
 
 ```bash
-brew upgrade --cask azpim
+brew upgrade azpim
 ```
-
-> **Gatekeeper prompt**: If macOS blocks the binary on first run, go to **System Settings → Privacy & Security** and click **Allow Anyway**, or clear the quarantine attribute:
->
-> ```bash
-> xattr -dr com.apple.quarantine "$(which azpim)"
-> ```
 
 ### macOS (ZIP download)
 
