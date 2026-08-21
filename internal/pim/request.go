@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"time"
+	"uuid"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
-	"github.com/google/uuid"
 )
 
 // ActivateOptions controls a SelfActivate PIM request.
