@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Publish the Homebrew tap as a formula (`brew install bgs113/tap/azpim`) instead of a cask. Casks re-apply the macOS quarantine attribute on install, which triggered a Gatekeeper block since the binary isn't Apple-notarized; formulas don't. Existing cask users should run `brew uninstall --cask azpim && brew install bgs113/tap/azpim`.
+- Require Go 1.27+ to build from source. Drops the direct `github.com/google/uuid` dependency in favor of Go 1.27's stdlib `uuid` package.
+- Replace GitHub's default CodeQL setup with a committed workflow (`.github/workflows/codeql.yml`), since default setup couldn't build with the new Go 1.27 requirement; add `actionlint` to CI to catch GitHub Actions workflow mistakes CodeQL's security-focused queries don't.
 - Group Dependabot PRs to reduce noise from SHA-pinned actions.
 - Bump `golangci/golangci-lint-action`.
 
