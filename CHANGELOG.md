@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Publish the Homebrew tap as a formula (`brew install bgs113/tap/azpim`) instead of a cask. Casks re-apply the macOS quarantine attribute on install, which triggered a Gatekeeper block since the binary isn't Apple-notarized; formulas don't. Existing cask users should run `brew uninstall --cask azpim && brew install bgs113/tap/azpim`.
 - Group Dependabot PRs to reduce noise from SHA-pinned actions.
 - Bump `golangci/golangci-lint-action`.
 

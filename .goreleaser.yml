@@ -48,10 +48,8 @@ docker_signs:
       - --yes
       - ${artifact}
 
-homebrew_casks:
+brews:
   - name: azpim
-    binaries:
-      - azpim
     repository:
       owner: bgs113
       name: homebrew-tap
@@ -59,6 +57,10 @@ homebrew_casks:
     homepage: https://github.com/bgs113/azpim
     description: "CLI for managing Azure Privileged Identity Management (PIM) role assignments"
     skip_upload: auto
+    install: |
+      bin.install "azpim"
+    test: |
+      system "#{bin}/azpim", "version"
 
 sboms:
   - artifacts: archive
