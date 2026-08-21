@@ -75,7 +75,3 @@ archives:
 checksum:
   name_template: "checksums.txt"
   algorithm: sha256
-
-# Use GitHub's native release notes (short SHAs, grouped by label/PR)
-changelog:
-  use: github-native
