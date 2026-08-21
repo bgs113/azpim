@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Group Dependabot PRs to reduce noise from SHA-pinned actions.
 - Bump `golangci/golangci-lint-action`.
 
+### Removed
+- Temporarily stop publishing the GHCR container image. `ko` (bundled in GoReleaser) fails to build when driven by a Go 1.27 compiler with `ko: azpim does not contain a valid local import path`, an upstream ko/Go 1.27 incompatibility unrelated to this repo. Will be re-enabled once ko ships a fix.
+
 ### Fixed
 - Fetch full history in CI checkout so gitleaks can diff against older commits.
 
