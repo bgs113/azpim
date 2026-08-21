@@ -18,7 +18,14 @@ builds:
       - windows_arm64
 
 kos:
-  - base_image: cgr.dev/chainguard/static:latest
+  # ko (bundled in goreleaser) breaks when driven by a Go 1.27 compiler: it
+  # miscomputes the local import path and fails with
+  # `ko: azpim does not contain a valid local import path () for directory (.)`.
+  # Reproduces even on pre-1.27 source, so it's an upstream ko/x-tools bug,
+  # not anything in this repo. Re-enable once ko ships a fix.
+  # https://github.com/google/ko
+  - disable: "true"
+    base_image: cgr.dev/chainguard/static:latest
     bare: true
     tags:
       - "{{.Version}}"
