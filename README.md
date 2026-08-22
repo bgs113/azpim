@@ -1,6 +1,7 @@
 # azpim
 
 [![CI](https://github.com/bgs113/azpim/actions/workflows/ci.yml/badge.svg)](https://github.com/bgs113/azpim/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/bgs113/azpim/actions/workflows/codeql.yml/badge.svg)](https://github.com/bgs113/azpim/actions/workflows/codeql.yml)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14199/baseline)](https://www.bestpractices.dev/projects/14199)
 
 A CLI tool for managing Azure Privileged Identity Management (PIM) role assignments for Azure Resources (RBAC). List eligible and active assignments, activate roles with interactive prompts, and deactivate them — all from the terminal.
