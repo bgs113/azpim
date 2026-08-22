@@ -250,6 +250,12 @@ make build        # produces ./azpim
 make install
 ```
 
+**Run the test suite:**
+
+```bash
+go test ./...
+```
+
 **Test a local release build without publishing:**
 
 ```bash
@@ -472,3 +478,7 @@ docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:lat
 docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:latest active --human
 docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:latest active --output json
 ```
+
+## Contributing
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the process, and [SECURITY.md](SECURITY.md) for reporting vulnerabilities instead of opening a public issue.
