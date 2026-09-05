@@ -15,6 +15,9 @@ coverage.out
 # Windows
 Thumbs.db
 
+# local dev environment (not published)
+/.mise.local.toml
+
 # local AI tooling (not published)
 /CLAUDE.md
 /AGENTS.md
