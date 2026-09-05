@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Bump the indirect `golang.org/x/crypto` dependency to v0.56.0, fixing two SSH-channel deadlock DoS advisories ([GO-2026-6354](https://pkg.go.dev/vuln/GO-2026-6354), [GO-2026-6355](https://pkg.go.dev/vuln/GO-2026-6355)). azpim doesn't use the `ssh` package, so this wasn't reachable, but keeps the dependency clean of known issues.
+
 ## [1.0.1] - 2026-08-21
 
 ### Changed
