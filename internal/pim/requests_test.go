@@ -56,44 +56,6 @@ func TestHumanizeRequestStatus(t *testing.T) {
 	}
 }
 
-func TestDeduplicateRequests(t *testing.T) {
-	t.Run("empty input", func(t *testing.T) {
-		if got := deduplicateRequests(nil); len(got) != 0 {
-			t.Errorf("got %d, want 0", len(got))
-		}
-	})
-
-	t.Run("no duplicates unchanged", func(t *testing.T) {
-		in := []ScheduleRequestEntry{
-			{RequestName: "uuid-1", RoleDefID: "role1", Status: "Active"},
-			{RequestName: "uuid-2", RoleDefID: "role2", Status: "Pending"},
-		}
-		if got := deduplicateRequests(in); len(got) != 2 {
-			t.Errorf("got %d, want 2", len(got))
-		}
-	})
-
-	t.Run("duplicate request names collapsed", func(t *testing.T) {
-		in := []ScheduleRequestEntry{
-			{RequestName: "uuid-1", RoleDefID: "role1"},
-			{RequestName: "uuid-1", RoleDefID: "role1"}, // same request from second scope query
-		}
-		if got := deduplicateRequests(in); len(got) != 1 {
-			t.Errorf("got %d, want 1", len(got))
-		}
-	})
-
-	t.Run("empty request name falls back to composite key", func(t *testing.T) {
-		in := []ScheduleRequestEntry{
-			{RequestName: "", RoleDefID: "role1", Scope: "/subscriptions/sub1", RequestType: "Activate"},
-			{RequestName: "", RoleDefID: "role1", Scope: "/subscriptions/sub1", RequestType: "Activate"},
-		}
-		if got := deduplicateRequests(in); len(got) != 1 {
-			t.Errorf("got %d, want 1", len(got))
-		}
-	})
-}
-
 func TestScheduleRequestEntryIsPending(t *testing.T) {
 	tests := []struct {
 		status string

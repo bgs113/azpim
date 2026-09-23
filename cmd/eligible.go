@@ -22,7 +22,7 @@ var eligibleCmd = &cobra.Command{
 	Long: `List all PIM-eligible role assignments for the current principal.
 
 Scope examples:
-  azpim eligible                                                    # all scopes (auto-discovered)
+  azpim eligible                                                    # whole tenant, one query
   azpim eligible --subscription 00000000-0000-0000-0000-000000000000
   azpim eligible --management-group myMG
   azpim eligible --management-group /
@@ -38,14 +38,12 @@ Scope examples:
 		if err != nil {
 			return err
 		}
-		defer clients.SaveRoleDefCache()
-
-		scopes, err := resolveScopes(ctx, clients, cred, eligibleScope)
+		scope, err := queryScope(ctx, clients, cred, eligibleScope)
 		if err != nil {
 			return err
 		}
 
-		assignments, err := clients.ListEligibleForScopes(ctx, scopes)
+		assignments, err := clients.ListEligible(ctx, scope)
 		if err != nil {
 			return err
 		}

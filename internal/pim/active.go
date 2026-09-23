@@ -61,8 +61,10 @@ func formatHuman(d time.Duration) string {
 	}
 }
 
-// ListActive returns active (time-bound) PIM role assignments for the current principal.
-// If includePermanent is true, directly-assigned permanent roles are also included.
+// ListActive returns active (time-bound) PIM role assignments for the current
+// principal at the given ARM scope. Pass "/" to list across the whole tenant in
+// one query. If includePermanent is true, directly-assigned permanent roles are
+// also included.
 func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent bool) ([]ActiveAssignment, error) {
 	filter := "asTarget()"
 	opts := &armauthorization.RoleAssignmentScheduleInstancesClientListForScopeOptions{
@@ -71,18 +73,7 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 
 	pager := c.ActiveInstances.NewListForScopePager(scope, opts)
 
-	// Phase 1: page through the API collecting raw fields (no ARM name lookups).
-	type raw struct {
-		roleDefID      string
-		scopeStr       string
-		membership     string
-		condition      string
-		state          string
-		assignmentType string
-		end            time.Time
-		hasExpiry      bool
-	}
-	var raws []raw
+	var out []ActiveAssignment
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -142,56 +133,30 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 				}
 			}
 
-			raws = append(raws, raw{
-				roleDefID:      PtrString(p.RoleDefinitionID),
-				scopeStr:       scopeStr,
-				membership:     membership,
-				condition:      PtrString(p.Condition),
-				state:          state,
-				assignmentType: assignmentType,
-				end:            end,
-				hasExpiry:      hasExpiry,
+			roleDefID := PtrString(p.RoleDefinitionID)
+			roleName, scopeName := displayNames(p.ExpandedProperties, roleDefID, scopeStr)
+
+			out = append(out, ActiveAssignment{
+				RoleName:       roleName,
+				Resource:       scopeName,
+				ResourceType:   resourceTypeFromScope(scopeStr),
+				MembershipType: membership,
+				Condition:      PtrString(p.Condition),
+				State:          state,
+				EndTime:        end,
+				HasExpiry:      hasExpiry,
+				Scope:          scopeStr,
+				RoleDefID:      roleDefID,
+				AssignmentType: assignmentType,
 			})
 		}
 	}
-
-	// Phase 2: resolve role names and scope names concurrently.
-	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
-	results := resolveConcurrently(raws, func(r raw) ActiveAssignment {
-		return ActiveAssignment{
-			RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
-			Resource:       c.ResolveScopeName(ctx, r.scopeStr),
-			ResourceType:   resourceTypeFromScope(r.scopeStr),
-			MembershipType: r.membership,
-			Condition:      r.condition,
-			State:          r.state,
-			EndTime:        r.end,
-			HasExpiry:      r.hasExpiry,
-			Scope:          r.scopeStr,
-			RoleDefID:      r.roleDefID,
-			AssignmentType: r.assignmentType,
-		}
-	})
-	return results, nil
-}
-
-// ListActiveForScopes queries multiple ARM scopes in parallel, combines the
-// results, and deduplicates by (RoleDefID, Scope, AssignmentType). Per-scope
-// errors (e.g. PIM not configured, 403) are dropped when at least one scope
-// succeeds. If every scope fails the first error is returned.
-func (c *Clients) ListActiveForScopes(ctx context.Context, scopes []string, includePermanent bool) ([]ActiveAssignment, error) {
-	all, err := fetchForScopes(scopes, func(scope string) ([]ActiveAssignment, error) {
-		return c.ListActive(ctx, scope, includePermanent)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return deduplicateActive(all), nil
+	return deduplicateActive(out), nil
 }
 
 // deduplicateActive removes duplicate active assignments using the same
 // two-pass strategy as deduplicateEligible: Group entries win over shadow
-// Direct entries regardless of the order goroutines returned results.
+// Direct entries regardless of the order the API returned results in.
 func deduplicateActive(in []ActiveAssignment) []ActiveAssignment {
 	return dedupeGroupWins(in,
 		func(a ActiveAssignment) string { return a.MembershipType },

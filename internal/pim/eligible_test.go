@@ -1,6 +1,10 @@
 package pim
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
+)
 
 func newEligible(name, guid, scope, membership string) EligibleAssignment {
 	return EligibleAssignment{
@@ -167,4 +171,34 @@ func TestResourceTypeFromScope(t *testing.T) {
 			t.Errorf("resourceTypeFromScope(%q) = %q, want %q", tt.scope, got, tt.want)
 		}
 	}
+}
+
+func TestDisplayNames(t *testing.T) {
+	const roleDefID = "/subscriptions/s1/providers/Microsoft.Authorization/roleDefinitions/b24988ac"
+	const scope = "/subscriptions/s1/resourceGroups/rg-app"
+	str := func(s string) *string { return &s }
+
+	t.Run("uses expandedProperties names", func(t *testing.T) {
+		ep := &armauthorization.ExpandedProperties{
+			RoleDefinition: &armauthorization.ExpandedPropertiesRoleDefinition{DisplayName: str("Contributor")},
+			Scope:          &armauthorization.ExpandedPropertiesScope{DisplayName: str("App RG")},
+		}
+		role, scopeName := displayNames(ep, roleDefID, scope)
+		if role != "Contributor" || scopeName != "App RG" {
+			t.Errorf("got (%q, %q), want (Contributor, App RG)", role, scopeName)
+		}
+	})
+
+	t.Run("falls back to GUID and last segment", func(t *testing.T) {
+		for _, ep := range []*armauthorization.ExpandedProperties{
+			nil,
+			{},
+			{RoleDefinition: &armauthorization.ExpandedPropertiesRoleDefinition{DisplayName: str("")}},
+		} {
+			role, scopeName := displayNames(ep, roleDefID, scope)
+			if role != "b24988ac" || scopeName != "rg-app" {
+				t.Errorf("displayNames(%+v) = (%q, %q), want (b24988ac, rg-app)", ep, role, scopeName)
+			}
+		}
+	})
 }

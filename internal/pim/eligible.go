@@ -3,6 +3,7 @@ package pim
 import (
 	"context"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ type EligibleAssignment struct {
 }
 
 // ListEligible returns all eligible PIM role assignments for the current principal
-// at the given ARM scope.
+// at the given ARM scope. Pass "/" to list across the whole tenant in one query.
 func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAssignment, error) {
 	filter := "asTarget()"
 	opts := &armauthorization.RoleEligibilityScheduleInstancesClientListForScopeOptions{
@@ -32,16 +33,7 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 
 	pager := c.EligibleInstances.NewListForScopePager(scope, opts)
 
-	// Phase 1: page through the API collecting raw fields (no ARM name lookups).
-	type raw struct {
-		roleDefID  string
-		scopeStr   string
-		membership string
-		condition  string
-		end        time.Time
-		hasExpiry  bool
-	}
-	var raws []raw
+	var out []EligibleAssignment
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -69,78 +61,40 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 			if scopeStr == "" {
 				scopeStr = scope
 			}
+			roleDefID := PtrString(p.RoleDefinitionID)
+			roleName, scopeName := displayNames(p.ExpandedProperties, roleDefID, scopeStr)
 
-			raws = append(raws, raw{
-				roleDefID:  PtrString(p.RoleDefinitionID),
-				scopeStr:   scopeStr,
-				membership: membership,
-				condition:  PtrString(p.Condition),
-				end:        end,
-				hasExpiry:  hasExpiry,
+			out = append(out, EligibleAssignment{
+				RoleName:       roleName,
+				Scope:          scopeStr,
+				ScopeDisplay:   scopeName,
+				ResourceType:   resourceTypeFromScope(scopeStr),
+				MembershipType: membership,
+				Condition:      PtrString(p.Condition),
+				EndTime:        end,
+				HasExpiry:      hasExpiry,
+				RoleDefID:      roleDefID,
 			})
 		}
 	}
-
-	// Phase 2: resolve role names and scope names concurrently.
-	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
-	results := resolveConcurrently(raws, func(r raw) EligibleAssignment {
-		return EligibleAssignment{
-			RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
-			Scope:          r.scopeStr,
-			ScopeDisplay:   c.ResolveScopeName(ctx, r.scopeStr),
-			ResourceType:   resourceTypeFromScope(r.scopeStr),
-			MembershipType: r.membership,
-			Condition:      r.condition,
-			EndTime:        r.end,
-			HasExpiry:      r.hasExpiry,
-			RoleDefID:      r.roleDefID,
-		}
-	})
-	return results, nil
+	return deduplicateEligible(out), nil
 }
 
-// ListEligibleForScopes queries multiple ARM scopes in parallel, combines the
-// results, and deduplicates by (RoleDefID, Scope, MembershipType). Per-scope
-// errors (e.g. PIM not configured, 403) are dropped when at least one scope
-// succeeds. If every scope fails the first error is returned.
-func (c *Clients) ListEligibleForScopes(ctx context.Context, scopes []string) ([]EligibleAssignment, error) {
-	all, err := fetchForScopes(scopes, func(scope string) ([]EligibleAssignment, error) {
-		return c.ListEligible(ctx, scope)
-	})
-	if err != nil {
-		return nil, err
+// displayNames returns the role and scope display names from an API
+// response's expandedProperties, falling back to the role definition GUID and
+// the last scope path segment when a name is missing.
+func displayNames(ep *armauthorization.ExpandedProperties, roleDefID, scope string) (roleName, scopeName string) {
+	roleName, scopeName = roleDefGUID(roleDefID), path.Base(scope)
+	if ep == nil {
+		return roleName, scopeName
 	}
-	return deduplicateEligible(all), nil
-}
-
-// fetchForScopes calls fetch for every scope in parallel and combines the
-// results. Per-scope errors are dropped when at least one scope succeeds; if
-// every scope fails, the first error is returned.
-func fetchForScopes[T any](scopes []string, fetch func(scope string) ([]T, error)) ([]T, error) {
-	type result struct {
-		items []T
-		err   error
+	if ep.RoleDefinition != nil && PtrString(ep.RoleDefinition.DisplayName) != "" {
+		roleName = *ep.RoleDefinition.DisplayName
 	}
-	ch := make(chan result, len(scopes))
-	for _, scope := range scopes {
-		go func() {
-			items, err := fetch(scope)
-			ch <- result{items, err}
-		}()
+	if ep.Scope != nil && PtrString(ep.Scope.DisplayName) != "" {
+		scopeName = *ep.Scope.DisplayName
 	}
-	var all []T
-	var firstErr error
-	for range scopes {
-		r := <-ch
-		all = append(all, r.items...)
-		if r.err != nil && firstErr == nil {
-			firstErr = r.err
-		}
-	}
-	if len(all) == 0 && firstErr != nil {
-		return nil, firstErr
-	}
-	return all, nil
+	return roleName, scopeName
 }
 
 // FilterEligibleActive removes eligible assignments that are already active
@@ -165,15 +119,11 @@ func FilterEligibleActive(eligible []EligibleAssignment, active []ActiveAssignme
 	return out
 }
 
-// deduplicateEligible removes duplicate eligible assignments. Two sources of
-// duplication are handled:
-//
-//  1. The same MG-scoped assignment is returned from every subscription scope
-//     query (normalise RoleDefID to GUID; deduplicate by role+scope).
-//
-//  2. When a group has an eligible assignment, Azure also creates a shadow
-//     "Direct" instance for every group member. The Azure Portal hides these
-//     shadows and shows only the Group entry.
+// deduplicateEligible removes duplicate eligible assignments. When a group has
+// an eligible assignment, Azure also creates a shadow "Direct" instance for
+// every group member. The Azure Portal hides these shadows and shows only the
+// Group entry. RoleDefID is normalised to its GUID because the same role can
+// come back with a subscription- or tenant-prefixed ID.
 func deduplicateEligible(in []EligibleAssignment) []EligibleAssignment {
 	return dedupeGroupWins(in,
 		func(a EligibleAssignment) string { return a.MembershipType },
@@ -186,7 +136,7 @@ func deduplicateEligible(in []EligibleAssignment) []EligibleAssignment {
 // (Azure creates a shadow Direct instance for every member of a group that
 // has an eligible/active assignment; the Portal hides these and shows only
 // the Group entry). A two-pass approach ensures Group always wins regardless
-// of the order concurrent fetches returned results in.
+// of the order the API returned results in.
 func dedupeGroupWins[T any](in []T, membershipType func(T) string, key func(T) string) []T {
 	// Pass 1: record which keys have a Group entry.
 	hasGroup := make(map[string]struct{}, len(in))

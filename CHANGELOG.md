@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- With no scope flags, `eligible`, `active`, `requests`, `activate`, `deactivate` and `extend` now list assignments with one tenant-wide query instead of querying every subscription and management group separately. This is faster in large tenants and avoids ARM throttling. Role and scope names now come from the same response, so azpim no longer makes extra lookups for them ([#23](https://github.com/bgs113/azpim/issues/23)).
+
+### Fixed
+- A subscription or management group that failed to list is no longer dropped silently. There is now a single query, so a failure is reported as an error.
+
+### Removed
+- The on-disk caches `~/.cache/azpim/scopes.json` and `~/.cache/azpim/roledefs.json`. azpim no longer writes to `~/.cache/azpim/`, and the directory can be deleted. The Docker examples no longer mount it.
+
 ## [1.0.2] - 2026-09-05
 
 ### Security
