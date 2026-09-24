@@ -25,11 +25,12 @@ type ScheduleRequestEntry struct {
 	RoleDefID      string
 }
 
-// ListRequests returns all role assignment schedule requests submitted by the
+// ListRequests returns all role assignment schedule requests that target the
 // current principal at the given ARM scope. Pass "/" to list across the whole
-// tenant in one query.
+// tenant in one query. asTarget() is used because asRequestor() is rejected
+// with InsufficientPermissions at "/"; for self-activation the two match.
 func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleRequestEntry, error) {
-	filter := "asRequestor()"
+	filter := "asTarget()"
 	opts := &armauthorization.RoleAssignmentScheduleRequestsClientListForScopeOptions{
 		Filter: &filter,
 	}

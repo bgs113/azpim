@@ -20,7 +20,8 @@ var (
 var requestsCmd = &cobra.Command{
 	Use:   "requests",
 	Short: "List your PIM role assignment requests",
-	Long: `List role assignment schedule requests you have submitted.
+	Long: `List role assignment schedule requests for you (your own activation requests,
+plus any an admin made on your behalf).
 
 Shows all requests by default (activate, extend, deactivate) with their
 current status. Use --pending to show only requests awaiting admin approval.
