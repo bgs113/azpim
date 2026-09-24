@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `requests` now lists requests that target you (`asTarget()`) instead of requests you submitted (`asRequestor()`), which Azure rejects at the tenant root. For self-activation the results are the same. Requests an admin made on your behalf now appear too.
 
 ### Fixed
+- `active --include-permanent` no longer hides a permanent assignment when you also have a group-based assignment for the same role and scope. Only the shadow Direct copies that Azure creates for group members are hidden now.
 - A subscription or management group that failed to list is no longer dropped silently. There is now a single query, so a failure is reported as an error.
 
 ### Removed

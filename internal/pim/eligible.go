@@ -131,12 +131,13 @@ func deduplicateEligible(in []EligibleAssignment) []EligibleAssignment {
 	)
 }
 
-// dedupeGroupWins removes duplicates keyed by key, preferring a "Group"
-// membershipType entry over shadow "Direct" entries sharing the same key
-// (Azure creates a shadow Direct instance for every member of a group that
-// has an eligible/active assignment; the Portal hides these and shows only
-// the Group entry). A two-pass approach ensures Group always wins regardless
-// of the order the API returned results in.
+// dedupeGroupWins removes duplicates keyed by key plus membership type, and
+// drops shadow "Direct" entries whose key also has a "Group" entry (Azure
+// creates a shadow Direct instance for every member of a group that has an
+// eligible/active assignment; the Portal hides these and shows only the Group
+// entry). Other membership types, such as "Permanent", are separate
+// assignments and are kept. A two-pass approach ensures Group always wins
+// regardless of the order the API returned results in.
 func dedupeGroupWins[T any](in []T, membershipType func(T) string, key func(T) string) []T {
 	// Pass 1: record which keys have a Group entry.
 	hasGroup := make(map[string]struct{}, len(in))
@@ -147,14 +148,15 @@ func dedupeGroupWins[T any](in []T, membershipType func(T) string, key func(T) s
 	}
 
 	// Pass 2: drop shadow Direct entries where a Group entry exists, then
-	// dedup the remainder so each key appears at most once.
+	// dedup the remainder so each key+membership appears at most once.
 	seen := make(map[string]struct{}, len(in))
 	out := make([]T, 0, len(in))
 	for _, a := range in {
 		k := key(a)
-		if _, ok := hasGroup[k]; ok && membershipType(a) != "Group" {
+		if _, ok := hasGroup[k]; ok && membershipType(a) == "Direct" {
 			continue // shadow Direct — a Group entry exists for this key
 		}
+		k += "|" + membershipType(a)
 		if _, ok := seen[k]; ok {
 			continue
 		}
