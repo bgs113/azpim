@@ -16,7 +16,7 @@ type EligibleAssignment struct {
 	Scope          string // raw ARM scope, used for activate API call
 	ScopeDisplay   string // human-readable scope name, used for table output
 	ResourceType   string
-	MembershipType string // Direct / Group
+	MembershipType string // Direct / Group / Inherited
 	Condition      string
 	EndTime        time.Time
 	HasExpiry      bool
@@ -45,10 +45,7 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 			}
 			p := inst.Properties
 
-			membership := "Direct"
-			if p.MemberType != nil && *p.MemberType == armauthorization.MemberTypeGroup {
-				membership = "Group"
-			}
+			membership := membershipLabel(p.MemberType)
 
 			var end time.Time
 			hasExpiry := false
@@ -78,6 +75,16 @@ func (c *Clients) ListEligible(ctx context.Context, scope string) ([]EligibleAss
 		}
 	}
 	return deduplicateEligible(out), nil
+}
+
+// membershipLabel returns the API's membership type as-is ("Direct",
+// "Group" or "Inherited"), or "Unknown" when the API omits it. Collapsing
+// values would misreport how the principal got the assignment.
+func membershipLabel(mt *armauthorization.MemberType) string {
+	if mt == nil {
+		return "Unknown"
+	}
+	return string(*mt)
 }
 
 // displayNames returns the role and scope display names from an API

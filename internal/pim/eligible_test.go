@@ -202,3 +202,21 @@ func TestDisplayNames(t *testing.T) {
 		}
 	})
 }
+
+func TestMembershipLabel(t *testing.T) {
+	mt := func(m armauthorization.MemberType) *armauthorization.MemberType { return &m }
+	tests := []struct {
+		in   *armauthorization.MemberType
+		want string
+	}{
+		{mt(armauthorization.MemberTypeDirect), "Direct"},
+		{mt(armauthorization.MemberTypeGroup), "Group"},
+		{mt(armauthorization.MemberTypeInherited), "Inherited"},
+		{nil, "Unknown"},
+	}
+	for _, tt := range tests {
+		if got := membershipLabel(tt.in); got != tt.want {
+			t.Errorf("membershipLabel(%v) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

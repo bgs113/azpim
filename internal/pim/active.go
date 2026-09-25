@@ -13,7 +13,7 @@ type ActiveAssignment struct {
 	RoleName       string
 	Resource       string // human-readable scope name (display name or last segment)
 	ResourceType   string
-	MembershipType string // Direct / Group / Permanent
+	MembershipType string // Direct / Group / Inherited / Permanent
 	Condition      string
 	State          string // Active / Permanent / Pending / Failed
 	EndTime        time.Time
@@ -96,10 +96,7 @@ func (c *Clients) ListActive(ctx context.Context, scope string, includePermanent
 				continue
 			}
 
-			membership := "Direct"
-			if p.MemberType != nil && *p.MemberType == armauthorization.MemberTypeGroup {
-				membership = "Group"
-			}
+			membership := membershipLabel(p.MemberType)
 			if isPermanent {
 				membership = "Permanent"
 			}

@@ -338,6 +338,8 @@ azpim eligible --output json
 
 **Table output columns:** ROLE · SCOPE · RESOURCE TYPE · MEMBERSHIP · CONDITION · END TIME
 
+**MEMBERSHIP** is how you hold the assignment, as reported by Azure: `Direct` (assigned to you), `Group` (assigned to a group you belong to), or `Inherited` (assigned at a parent scope of the one you queried, e.g. a management group when you pass `--subscription`). `active` also shows `Permanent` for permanent assignments (with `--include-permanent`).
+
 ---
 
 ### `azpim active` — List active assignments
