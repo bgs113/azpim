@@ -208,17 +208,15 @@ cosign verify \
 
 Signatures are keyless — the certificate proves the image was built by the Release workflow in this repository and is recorded in [Rekor's](https://rekor.sigstore.dev) public transparency log.
 
-**Run using your existing `az login` session** (mounts Azure CLI credentials and cache from the host):
+**Run using your existing `az login` session** (mounts Azure CLI credentials from the host):
 
 ```bash
 docker run --rm -it \
   -v ~/.azure:/home/nonroot/.azure:ro \
-  -v ~/.cache/azpim:/home/nonroot/.cache/azpim \
   ghcr.io/bgs113/azpim:latest eligible
 
 docker run --rm -it \
   -v ~/.azure:/home/nonroot/.azure:ro \
-  -v ~/.cache/azpim:/home/nonroot/.cache/azpim \
   ghcr.io/bgs113/azpim:latest activate \
     --subscription 00000000-0000-0000-0000-000000000000 \
     --role Contributor --duration 4 --justification "Incident response"
@@ -312,7 +310,7 @@ All commands accept the same scope flags to target a specific part of your Azure
 | `--management-group /`                      | Tenant root group  | `/providers/Microsoft.Management/managementGroups/<tenantId>` |
 | `--scope <arm-scope>`                       | Explicit ARM scope | (as provided)                                                 |
 
-If no scope is specified, `azpim` automatically discovers all accessible subscriptions and management groups.
+If no scope is specified, `azpim` lists your assignments across the whole tenant in a single query (the same view as "My roles" in the Azure Portal).
 
 The `--subscription` and `--management-group` flags also read from environment variables `AZURE_SUBSCRIPTION_ID` and `AZURE_MANAGEMENT_GROUP_ID` respectively.
 
@@ -339,6 +337,8 @@ azpim eligible --output json
 ```
 
 **Table output columns:** ROLE · SCOPE · RESOURCE TYPE · MEMBERSHIP · CONDITION · END TIME
+
+**MEMBERSHIP** is how you hold the assignment, as reported by Azure: `Direct` (assigned to you), `Group` (assigned to a group you belong to), or `Inherited` (assigned at a parent scope of the one you queried, e.g. a management group when you pass `--subscription`). `active` also shows `Permanent` for permanent assignments (with `--include-permanent`).
 
 ---
 

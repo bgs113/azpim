@@ -137,27 +137,20 @@ func resolveScope(ctx context.Context, cred azcore.TokenCredential, flags scopeF
 	return pim.BuildScope(flags.ManagementGroup, tenantID, flags.Subscription, flags.ResourceGroup, flags.Scope)
 }
 
-// resolveScopes returns the ARM scopes to query.
-//
-//   - With any explicit scope flag: resolves to a single-element slice.
-//   - With no flags: enumerates all accessible subscriptions and management
-//     groups in parallel, matching the Azure Portal "My roles" behavior.
-func resolveScopes(ctx context.Context, clients *pim.Clients, cred azcore.TokenCredential, flags scopeFlags) ([]string, error) {
-	if flags.Scope != "" || flags.ManagementGroup != "" || flags.Subscription != "" {
-		if flags.Subscription != "" {
-			id, err := clients.ResolveSubscriptionID(ctx, flags.Subscription)
-			if err != nil {
-				return nil, err
-			}
-			flags.Subscription = id
-		}
-		scope, err := resolveScope(ctx, cred, flags)
-		if err != nil {
-			return nil, err
-		}
-		return []string{scope}, nil
+// queryScope returns the ARM scope to list assignments at: the scope named by
+// the flags, or "/" (the whole tenant, in one query) when none are set.
+func queryScope(ctx context.Context, clients *pim.Clients, cred azcore.TokenCredential, flags scopeFlags) (string, error) {
+	if flags.Scope == "" && flags.ManagementGroup == "" && flags.Subscription == "" {
+		return "/", nil
 	}
-	return clients.ListAccessibleScopes(ctx)
+	if flags.Subscription != "" {
+		id, err := clients.ResolveSubscriptionID(ctx, flags.Subscription)
+		if err != nil {
+			return "", err
+		}
+		flags.Subscription = id
+	}
+	return resolveScope(ctx, cred, flags)
 }
 
 // addOutputFlags registers output format flags on a command.

@@ -1,44 +1,26 @@
 package pim
 
 import (
-	"context"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
-	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/managementgroups/armmanagementgroups"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
-	"golang.org/x/sync/singleflight"
 )
-
-// roleDefGetter is the subset of [*armauthorization.RoleDefinitionsClient] used
-// for role name resolution. Extracted as an interface to allow test injection.
-type roleDefGetter interface {
-	Get(ctx context.Context, scope string, roleDefinitionID string, options *armauthorization.RoleDefinitionsClientGetOptions) (armauthorization.RoleDefinitionsClientGetResponse, error)
-}
 
 // Clients bundles the ARM authorization clients needed for PIM operations.
 type Clients struct {
 	EligibleInstances *armauthorization.RoleEligibilityScheduleInstancesClient
 	ActiveInstances   *armauthorization.RoleAssignmentScheduleInstancesClient
 	Requests          *armauthorization.RoleAssignmentScheduleRequestsClient
-	RoleDefinitions   roleDefGetter
 	PolicyAssignments *armauthorization.RoleManagementPolicyAssignmentsClient
 	Policies          *armauthorization.RoleManagementPoliciesClient
 	Subscriptions     *armsubscriptions.Client
-	ManagementGroups  *armmanagementgroups.Client
 	cred              azcore.TokenCredential
 	mu                sync.Mutex
-	roleDefFlight     singleflight.Group
-	scopeNameFlight   singleflight.Group
-	// roleDefCache caches role definition display names keyed by their full ARM ID.
-	roleDefCache map[string]string
-	// scopeNameCache caches human-readable display names keyed by ARM scope string.
-	scopeNameCache map[string]string
 	// policyCache caches FetchMaxActivationDuration results keyed by "roleGUID|scope".
 	policyCache map[string]time.Duration
 }
@@ -63,11 +45,6 @@ func NewClients(cred azcore.TokenCredential) (*Clients, error) {
 		return nil, fmt.Errorf("create schedule requests client: %w", err)
 	}
 
-	roleDefs, err := armauthorization.NewRoleDefinitionsClient(cred, &opts)
-	if err != nil {
-		return nil, fmt.Errorf("create role definitions client: %w", err)
-	}
-
 	policyAssignments, err := armauthorization.NewRoleManagementPolicyAssignmentsClient(cred, &opts)
 	if err != nil {
 		return nil, fmt.Errorf("create policy assignments client: %w", err)
@@ -83,107 +60,16 @@ func NewClients(cred azcore.TokenCredential) (*Clients, error) {
 		return nil, fmt.Errorf("create subscriptions client: %w", err)
 	}
 
-	managementGroups, err := armmanagementgroups.NewClient(cred, &opts)
-	if err != nil {
-		return nil, fmt.Errorf("create management groups client: %w", err)
-	}
-
 	return &Clients{
 		EligibleInstances: eligible,
 		ActiveInstances:   active,
 		Requests:          requests,
-		RoleDefinitions:   roleDefs,
 		PolicyAssignments: policyAssignments,
 		Policies:          policies,
 		Subscriptions:     subscriptions,
-		ManagementGroups:  managementGroups,
 		cred:              cred,
-		roleDefCache: func() map[string]string {
-			if path, err := roleDefCachePath(); err == nil {
-				if loaded := loadRoleDefDiskCache(path); loaded != nil {
-					return loaded
-				}
-			}
-			return make(map[string]string)
-		}(),
-		scopeNameCache: make(map[string]string),
-		policyCache:    make(map[string]time.Duration),
+		policyCache:       make(map[string]time.Duration),
 	}, nil
-}
-
-// ResolveRoleName returns the display name for a role definition ARM ID,
-// caching results to avoid redundant API calls.
-func (c *Clients) ResolveRoleName(ctx context.Context, roleDefID string) string {
-	c.mu.Lock()
-	if name, ok := c.roleDefCache[roleDefID]; ok {
-		c.mu.Unlock()
-		return name
-	}
-	c.mu.Unlock()
-
-	// roleDefID looks like: /subscriptions/{sub}/providers/Microsoft.Authorization/roleDefinitions/{id}
-	// or /providers/Microsoft.Authorization/roleDefinitions/{id} for built-ins.
-	// The SDK's Get method requires the scope (everything before /providers/Microsoft.Authorization/roleDefinitions)
-	// and the roleDefinitionId (the GUID at the end).
-	parts := strings.Split(roleDefID, "/providers/Microsoft.Authorization/roleDefinitions/")
-	if len(parts) != 2 {
-		return roleDefID
-	}
-	scope := parts[0]
-	if scope == "" {
-		scope = "/"
-	}
-	guid := parts[1]
-
-	val, _, _ := c.roleDefFlight.Do(roleDefID, func() (any, error) {
-		resp, err := c.RoleDefinitions.Get(ctx, scope, guid, nil)
-		name := guid // fallback to GUID on error
-		if err == nil && resp.Properties != nil && resp.Properties.RoleName != nil && *resp.Properties.RoleName != "" {
-			name = *resp.Properties.RoleName
-		}
-		c.mu.Lock()
-		c.roleDefCache[roleDefID] = name
-		c.mu.Unlock()
-		return name, nil
-	})
-	return val.(string)
-}
-
-// saveRoleDefCacheTo flushes the current in-memory role definition name cache
-// to the given path. Used internally and by tests.
-func (c *Clients) saveRoleDefCacheTo(path string) {
-	c.mu.Lock()
-	m := make(map[string]string, len(c.roleDefCache))
-	for k, v := range c.roleDefCache {
-		m[k] = v
-	}
-	c.mu.Unlock()
-	saveRoleDefDiskCache(path, m)
-}
-
-// SaveRoleDefCache flushes the in-memory role definition name cache to disk.
-// Call via defer immediately after NewClients succeeds.
-func (c *Clients) SaveRoleDefCache() {
-	path, err := roleDefCachePath()
-	if err != nil {
-		return
-	}
-	c.saveRoleDefCacheTo(path)
-}
-
-// scopeNameGet reads the scope name cache with the lock held.
-func (c *Clients) scopeNameGet(scope string) (string, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	name, ok := c.scopeNameCache[scope]
-	return name, ok
-}
-
-// scopeNameSet writes to the scope name cache with the lock held.
-func (c *Clients) scopeNameSet(scope, name string) {
-	c.mu.Lock()
-	c.scopeNameCache[scope] = name
-	c.mu.Unlock()
 }
 
 // BuildScope converts convenience flags into an ARM scope string.
@@ -222,21 +108,4 @@ func PtrString(s *string) string {
 		return ""
 	}
 	return *s
-}
-
-// resolveConcurrently applies build to every element of raws in parallel,
-// preserving order. Used to fan out ResolveRoleName/ResolveScopeName lookups
-// (which singleflight-coalesce duplicate calls) across a page of results.
-func resolveConcurrently[R any, T any](raws []R, build func(R) T) []T {
-	results := make([]T, len(raws))
-	var wg sync.WaitGroup
-	for i, r := range raws {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			results[i] = build(r)
-		}()
-	}
-	wg.Wait()
-	return results
 }

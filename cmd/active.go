@@ -26,7 +26,7 @@ By default, permanently-assigned roles are not shown. Use --include-permanent to
 include them (they appear with "Permanent" in the Time remaining column).
 
 Scope examples:
-  azpim active                                                      # all scopes (auto-discovered)
+  azpim active                                                      # whole tenant, one query
   azpim active --subscription 00000000-0000-0000-0000-000000000000
   azpim active --management-group myMG --include-permanent`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -40,14 +40,12 @@ Scope examples:
 		if err != nil {
 			return err
 		}
-		defer clients.SaveRoleDefCache()
-
-		scopes, err := resolveScopes(ctx, clients, cred, activeScope)
+		scope, err := queryScope(ctx, clients, cred, activeScope)
 		if err != nil {
 			return err
 		}
 
-		assignments, err := clients.ListActiveForScopes(ctx, scopes, activeIncludePermanent)
+		assignments, err := clients.ListActive(ctx, scope, activeIncludePermanent)
 		if err != nil {
 			return err
 		}

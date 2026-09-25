@@ -47,19 +47,17 @@ Examples:
 		if err != nil {
 			return err
 		}
-		defer clients.SaveRoleDefCache()
-
 		principalID, err := auth.ResolvePrincipalID(ctx, cred)
 		if err != nil {
 			return fmt.Errorf("resolve principal ID: %w", err)
 		}
 
-		scopes, err := resolveScopes(ctx, clients, cred, extendScope)
+		scope, err := queryScope(ctx, clients, cred, extendScope)
 		if err != nil {
 			return err
 		}
 
-		active, err := clients.ListActiveForScopes(ctx, scopes, false)
+		active, err := clients.ListActive(ctx, scope, false)
 		if err != nil {
 			return fmt.Errorf("fetch active assignments: %w", err)
 		}

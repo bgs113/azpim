@@ -25,30 +25,19 @@ type ScheduleRequestEntry struct {
 	RoleDefID      string
 }
 
-// ListRequests returns all role assignment schedule requests submitted by the
-// current principal at the given ARM scope.
+// ListRequests returns all role assignment schedule requests that target the
+// current principal at the given ARM scope. Pass "/" to list across the whole
+// tenant in one query. asTarget() is used because asRequestor() is rejected
+// with InsufficientPermissions at "/"; for self-activation the two match.
 func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleRequestEntry, error) {
-	filter := "asRequestor()"
+	filter := "asTarget()"
 	opts := &armauthorization.RoleAssignmentScheduleRequestsClientListForScopeOptions{
 		Filter: &filter,
 	}
 
 	pager := c.Requests.NewListForScopePager(scope, opts)
 
-	// Phase 1: page through the API collecting raw fields (no ARM name lookups).
-	type raw struct {
-		reqName        string
-		roleDefID      string
-		scopeStr       string
-		requestType    string
-		status         string
-		justification  string
-		requestedAt    time.Time
-		hasRequestedAt bool
-		expiresAt      time.Time
-		hasExpiry      bool
-	}
-	var raws []raw
+	var out []ScheduleRequestEntry
 	for pager.More() {
 		page, err := pager.NextPage(ctx)
 		if err != nil {
@@ -86,76 +75,27 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 				}
 			}
 
-			raws = append(raws, raw{
-				reqName:        reqName,
-				roleDefID:      PtrString(p.RoleDefinitionID),
-				scopeStr:       scopeStr,
-				requestType:    humanizeRequestType(p.RequestType),
-				status:         humanizeRequestStatus(p.Status),
-				justification:  PtrString(p.Justification),
-				requestedAt:    requestedAt,
-				hasRequestedAt: hasRequestedAt,
-				expiresAt:      expiresAt,
-				hasExpiry:      hasExpiry,
+			roleDefID := PtrString(p.RoleDefinitionID)
+			roleName, scopeName := displayNames(p.ExpandedProperties, roleDefID, scopeStr)
+
+			out = append(out, ScheduleRequestEntry{
+				RequestName:    reqName,
+				RoleName:       roleName,
+				Scope:          scopeStr,
+				ScopeDisplay:   scopeName,
+				ResourceType:   resourceTypeFromScope(scopeStr),
+				RequestType:    humanizeRequestType(p.RequestType),
+				Status:         humanizeRequestStatus(p.Status),
+				Justification:  PtrString(p.Justification),
+				RequestedAt:    requestedAt,
+				HasRequestedAt: hasRequestedAt,
+				ExpiresAt:      expiresAt,
+				HasExpiry:      hasExpiry,
+				RoleDefID:      roleDefID,
 			})
 		}
 	}
-
-	// Phase 2: resolve role names and scope names concurrently.
-	// singleflight in ResolveRoleName/ResolveScopeName coalesces duplicate lookups.
-	results := resolveConcurrently(raws, func(r raw) ScheduleRequestEntry {
-		return ScheduleRequestEntry{
-			RequestName:    r.reqName,
-			RoleName:       c.ResolveRoleName(ctx, r.roleDefID),
-			Scope:          r.scopeStr,
-			ScopeDisplay:   c.ResolveScopeName(ctx, r.scopeStr),
-			ResourceType:   resourceTypeFromScope(r.scopeStr),
-			RequestType:    r.requestType,
-			Status:         r.status,
-			Justification:  r.justification,
-			RequestedAt:    r.requestedAt,
-			HasRequestedAt: r.hasRequestedAt,
-			ExpiresAt:      r.expiresAt,
-			HasExpiry:      r.hasExpiry,
-			RoleDefID:      r.roleDefID,
-		}
-	})
-	return results, nil
-}
-
-// ListRequestsForScopes queries multiple ARM scopes in parallel, combines the
-// results, and deduplicates by request name. Per-scope errors (e.g. PIM not
-// configured, 403) are dropped when at least one scope succeeds. If every
-// scope fails the first error is returned.
-func (c *Clients) ListRequestsForScopes(ctx context.Context, scopes []string) ([]ScheduleRequestEntry, error) {
-	all, err := fetchForScopes(scopes, func(scope string) ([]ScheduleRequestEntry, error) {
-		return c.ListRequests(ctx, scope)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return deduplicateRequests(all), nil
-}
-
-// deduplicateRequests removes duplicate entries by request name (UUID).
-// The same request can appear when querying both subscription and management
-// group scopes if the request was submitted at a parent scope.
-func deduplicateRequests(in []ScheduleRequestEntry) []ScheduleRequestEntry {
-	seen := make(map[string]struct{}, len(in))
-	out := make([]ScheduleRequestEntry, 0, len(in))
-	for _, r := range in {
-		key := r.RequestName
-		if key == "" {
-			// No name — use a composite key to avoid silently dropping entries.
-			key = r.RoleDefID + "|" + normalizeScope(r.Scope) + "|" + r.RequestType
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, r)
-	}
-	return out
+	return out, nil
 }
 
 func humanizeRequestType(rt *armauthorization.RequestType) string {

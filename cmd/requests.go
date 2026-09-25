@@ -20,13 +20,14 @@ var (
 var requestsCmd = &cobra.Command{
 	Use:   "requests",
 	Short: "List your PIM role assignment requests",
-	Long: `List role assignment schedule requests you have submitted.
+	Long: `List role assignment schedule requests for you (your own activation requests,
+plus any an admin made on your behalf).
 
 Shows all requests by default (activate, extend, deactivate) with their
 current status. Use --pending to show only requests awaiting admin approval.
 
 Scope examples:
-  azpim requests                                                    # all scopes (auto-discovered)
+  azpim requests                                                    # whole tenant, one query
   azpim requests --pending                                          # only pending approval
   azpim requests --subscription 00000000-0000-0000-0000-000000000000`,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -40,14 +41,12 @@ Scope examples:
 		if err != nil {
 			return err
 		}
-		defer clients.SaveRoleDefCache()
-
-		scopes, err := resolveScopes(ctx, clients, cred, requestsScope)
+		scope, err := queryScope(ctx, clients, cred, requestsScope)
 		if err != nil {
 			return err
 		}
 
-		requests, err := clients.ListRequestsForScopes(ctx, scopes)
+		requests, err := clients.ListRequests(ctx, scope)
 		if err != nil {
 			return err
 		}

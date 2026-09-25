@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- With no scope flags, `eligible`, `active`, `requests`, `activate`, `deactivate` and `extend` now list assignments with one tenant-wide query instead of querying every subscription and management group separately. This is faster in large tenants and avoids ARM throttling. Role and scope names now come from the same response, so azpim no longer makes extra lookups for them ([#23](https://github.com/bgs113/azpim/issues/23)).
+- `requests` now lists requests that target you (`asTarget()`) instead of requests you submitted (`asRequestor()`), which Azure rejects at the tenant root. For self-activation the results are the same. Requests an admin made on your behalf now appear too.
+
+### Fixed
+- The MEMBERSHIP column (`membership_type` in JSON) now shows Azure's value as-is. Before, anything other than `Group` was shown as `Direct`, so an assignment inherited from a parent scope (`Inherited`) looked like a direct assignment.
+- `active --include-permanent` no longer hides a permanent assignment when you also have a group-based assignment for the same role and scope. Only the shadow Direct copies that Azure creates for group members are hidden now.
+- A subscription or management group that failed to list is no longer dropped silently. There is now a single query, so a failure is reported as an error.
+
+### Removed
+- The on-disk caches `~/.cache/azpim/scopes.json` and `~/.cache/azpim/roledefs.json`. azpim no longer writes to `~/.cache/azpim/`, and the directory can be deleted. The Docker examples no longer mount it.
+
 ## [1.0.2] - 2026-09-05
 
 ### Security

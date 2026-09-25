@@ -50,6 +50,23 @@ func TestDeduplicateActive(t *testing.T) {
 		}
 	})
 
+	t.Run("permanent kept alongside group for same role+scope", func(t *testing.T) {
+		perm := newActive("guid1", "/subscriptions/sub1", "Permanent")
+		group := newActive("guid1", "/subscriptions/sub1", "Group")
+		direct := newActive("guid1", "/subscriptions/sub1", "Direct")
+		for _, in := range [][]ActiveAssignment{{perm, group, direct}, {direct, group, perm}} {
+			got := deduplicateActive(in)
+			if len(got) != 2 {
+				t.Fatalf("got %v, want Permanent and Group entries", got)
+			}
+			for _, a := range got {
+				if a.MembershipType == "Direct" {
+					t.Errorf("shadow Direct entry kept: %v", got)
+				}
+			}
+		}
+	})
+
 	t.Run("same role at different scopes not deduped", func(t *testing.T) {
 		a := newActive("guid1", "/subscriptions/sub1", "Direct")
 		b := newActive("guid1", "/subscriptions/sub2", "Direct")

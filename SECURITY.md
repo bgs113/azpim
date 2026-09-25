@@ -30,5 +30,4 @@ This tool interacts with Azure PIM APIs using credentials from your local enviro
 
 - Credential handling or leakage
 - Privilege escalation beyond what the authenticated principal is eligible for
-- Cache file permissions or data exposure (`~/.cache/azpim/`)
 - Dependency vulnerabilities (also tracked via `govulncheck` in CI)

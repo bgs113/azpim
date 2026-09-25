@@ -51,14 +51,12 @@ Examples:
 		if err != nil {
 			return err
 		}
-		defer clients.SaveRoleDefCache()
-
 		principalID, err := auth.ResolvePrincipalID(ctx, cred)
 		if err != nil {
 			return fmt.Errorf("resolve principal ID: %w", err)
 		}
 
-		scopes, err := resolveScopes(ctx, clients, cred, activateScope)
+		scope, err := queryScope(ctx, clients, cred, activateScope)
 		if err != nil {
 			return err
 		}
@@ -71,7 +69,7 @@ Examples:
 			g, gctx := errgroup.WithContext(ctx)
 			g.Go(func() error {
 				var err error
-				eligible, err = clients.ListEligibleForScopes(gctx, scopes)
+				eligible, err = clients.ListEligible(gctx, scope)
 				if err != nil {
 					return fmt.Errorf("fetch eligible assignments: %w", err)
 				}
@@ -79,7 +77,7 @@ Examples:
 			})
 			g.Go(func() error {
 				var err error
-				active, err = clients.ListActiveForScopes(gctx, scopes, false)
+				active, err = clients.ListActive(gctx, scope, false)
 				if err != nil {
 					return fmt.Errorf("fetch active assignments: %w", err)
 				}
