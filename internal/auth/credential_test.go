@@ -33,3 +33,21 @@ func TestResolveTokenClaim(t *testing.T) {
 		t.Error("expected error for missing claim")
 	}
 }
+
+func TestIdentityLabel(t *testing.T) {
+	cases := []struct {
+		name   string
+		claims map[string]any
+		want   string
+	}{
+		{"user", map[string]any{"upn": "alice@contoso.com", "appid": "cli", "scp": "user_impersonation", "oid": "o1", "tid": "t1"}, "alice@contoso.com (tenant t1)"},
+		{"service principal", map[string]any{"appid": "app1", "oid": "o1", "tid": "t1"}, "service principal app1 (tenant t1)"},
+		{"user without upn", map[string]any{"appid": "cli", "scp": "user_impersonation", "oid": "o1", "tid": "t1"}, "object o1 (tenant t1)"},
+		{"oid only", map[string]any{"oid": "o1"}, "object o1"},
+	}
+	for _, c := range cases {
+		if got := identityLabel(c.claims); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}

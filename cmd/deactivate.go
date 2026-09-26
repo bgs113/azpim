@@ -43,9 +43,9 @@ Examples:
 		if err != nil {
 			return err
 		}
-		principalID, err := auth.ResolvePrincipalID(ctx, cred)
+		principalID, err := resolvePrincipal(ctx, cred)
 		if err != nil {
-			return fmt.Errorf("resolve principal ID: %w", err)
+			return err
 		}
 
 		scope, err := queryScope(ctx, clients, cred, deactivateScope)
