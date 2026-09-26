@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-26
+
 ### Added
 - Release archives and container images now have GitHub artifact attestations (SLSA v1.0 Build Level 2 provenance), recording the workflow run, commit and tag that built them. Verify with `gh attestation verify <file> --repo bgs113/azpim` or `gh attestation verify oci://ghcr.io/bgs113/azpim:<tag> --repo bgs113/azpim`. This complements the existing Cosign signature on `checksums.txt`.
 
@@ -85,7 +87,8 @@ First public release.
 - Sign release binaries and container images with Cosign; publish SBOMs.
 - Add MIT license.
 
-[Unreleased]: https://github.com/bgs113/azpim/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/bgs113/azpim/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/bgs113/azpim/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bgs113/azpim/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/bgs113/azpim/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bgs113/azpim/compare/v1.0.0...v1.0.1
