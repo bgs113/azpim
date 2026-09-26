@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- The Homebrew formula now installs bash, zsh and fish completions (generated from `azpim completion`).
+
 ## [1.1.1] - 2026-09-26
 
 ### Added
