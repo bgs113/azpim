@@ -6,7 +6,7 @@ import (
 	"io"
 	"time"
 
-	"azpim/internal/pim"
+	"github.com/bgs113/azpim/internal/pim"
 )
 
 type eligibleJSON struct {

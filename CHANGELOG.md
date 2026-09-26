@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `go install github.com/bgs113/azpim@latest` now works: the module path is `github.com/bgs113/azpim` (was `azpim`), so the Go module proxy and pkg.go.dev can find it ([#34](https://github.com/bgs113/azpim/issues/34)). Binaries built this way report their module version in `azpim version`.
+
 ### Changed
 - JSON output of `activate`, `extend` and `deactivate`: `status` now uses the same values as `azpim requests` (`Active`, `Pending`, …), and a new `azure_status` field carries Azure's raw status. `activate`'s pending value changes from `PendingApproval` to `Pending`. The time fields (`activated_at`, `extended_at`, `deactivated_at`, `expires_at`) are omitted until Azure confirms the change; `requested_at` is always set.
 - With no scope flags, `eligible`, `active`, `requests`, `activate`, `deactivate` and `extend` now list assignments with one tenant-wide query instead of querying every subscription and management group separately. This is faster in large tenants and avoids ARM throttling. Role and scope names now come from the same response, so azpim no longer makes extra lookups for them ([#23](https://github.com/bgs113/azpim/issues/23)).

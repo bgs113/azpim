@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"azpim/internal/pim"
+	"github.com/bgs113/azpim/internal/pim"
 )
 
 func TestParseDurationInput(t *testing.T) {

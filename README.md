@@ -123,6 +123,14 @@ Restart your terminal after updating PATH.
 
 After this, you can update azpim by simply replacing `$HOME\bin\azpim.exe` with a newer version.
 
+### Go
+
+With [Go](https://go.dev/dl/) installed, build and install the latest release into `$(go env GOPATH)/bin`:
+
+```bash
+go install github.com/bgs113/azpim@latest
+```
+
 ### Verify the download
 
 After downloading, verify the checksum against `checksums.txt` from the same release:

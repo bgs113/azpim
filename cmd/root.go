@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"azpim/internal/auth"
-	"azpim/internal/pim"
+	"github.com/bgs113/azpim/internal/auth"
+	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/manifoldco/promptui"
