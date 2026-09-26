@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+	_ "time/tzdata" // parseStart tests use a named zone, independent of the machine's
 
 	"github.com/bgs113/azpim/internal/pim"
 )
@@ -181,6 +182,7 @@ func TestPrintActivateJSON(t *testing.T) {
 			"My Sub",
 			dur,
 			now,
+			time.Time{},
 			pim.RequestOutcome{Status: "Provisioned"},
 		)
 		if err != nil {
@@ -220,6 +222,7 @@ func TestPrintActivateJSON(t *testing.T) {
 			"My Sub",
 			dur,
 			now,
+			time.Time{},
 			pim.RequestOutcome{Status: "PendingAdminDecision"},
 		)
 		if err != nil {
@@ -271,7 +274,7 @@ func TestOutcomeLineChecks(t *testing.T) {
 func TestPrintActivateJSONChecks(t *testing.T) {
 	for _, check := range []string{"DryRun", "Validated"} {
 		var buf bytes.Buffer
-		if err := printActivateJSON(&buf, "Owner", "rd", "/subscriptions/s", "S", time.Hour, time.Now(),
+		if err := printActivateJSON(&buf, "Owner", "rd", "/subscriptions/s", "S", time.Hour, time.Now(), time.Time{},
 			pim.RequestOutcome{Check: check, Status: "Provisioned"}); err != nil {
 			t.Fatal(err)
 		}
@@ -284,6 +287,99 @@ func TestPrintActivateJSONChecks(t *testing.T) {
 		}
 		if _, ok := out["activated_at"]; ok {
 			t.Errorf("%s: activated_at set; nothing was activated", check)
+		}
+	}
+}
+
+func TestParseStart(t *testing.T) {
+	ny, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 20:00 EST on the evening before DST starts (2026-03-08 02:00).
+	now := time.Date(2026, 3, 7, 20, 0, 0, 0, ny)
+	tests := []struct {
+		in      string
+		want    time.Time
+		wantErr bool
+	}{
+		{"22:00", time.Date(2026, 3, 7, 22, 0, 0, 0, ny), false},
+		// Already past today, so tomorrow; after DST starts, 09:00 EDT is 13:00 UTC (Add(24h) would give 10:00).
+		{"09:00", time.Date(2026, 3, 8, 13, 0, 0, 0, time.UTC), false},
+		{"2026-10-01T22:00", time.Date(2026, 10, 2, 2, 0, 0, 0, time.UTC), false},
+		{"2026-10-01 22:00", time.Date(2026, 10, 2, 2, 0, 0, 0, time.UTC), false},
+		{"2026-10-01T22:00:00Z", time.Date(2026, 10, 1, 22, 0, 0, 0, time.UTC), false},
+		{"2026-10-01T22:00:00+02:00", time.Date(2026, 10, 1, 20, 0, 0, 0, time.UTC), false},
+		{"2026-03-07T19:57", time.Date(2026, 3, 8, 0, 57, 0, 0, time.UTC), false}, // 3 minutes ago: within the clock-skew grace
+		{"2026-03-07T19:00", time.Time{}, true},                                   // an hour ago
+		{"tomorrow", time.Time{}, true},
+		{"25:00", time.Time{}, true},
+	}
+	for _, tt := range tests {
+		got, err := parseStart(tt.in, now)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("parseStart(%q): err = %v, wantErr %v", tt.in, err, tt.wantErr)
+			continue
+		}
+		if !tt.wantErr && !got.Equal(tt.want) {
+			t.Errorf("parseStart(%q) = %v, want %v", tt.in, got.UTC(), tt.want.UTC())
+		}
+	}
+}
+
+func TestPrintActivateJSONScheduled(t *testing.T) {
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	start := time.Date(2026, 10, 1, 22, 0, 0, 0, time.UTC)
+	var buf bytes.Buffer
+	if err := printActivateJSON(&buf, "Owner", "rd", "/subscriptions/s", "S", 4*time.Hour, now, start,
+		pim.RequestOutcome{Status: "PendingScheduleCreation"}); err != nil {
+		t.Fatal(err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["requested_at"] != "2026-09-25T12:00:00Z" || out["activated_at"] != "2026-10-01T22:00:00Z" || out["expires_at"] != "2026-10-02T02:00:00Z" {
+		t.Errorf("requested_at/activated_at/expires_at = %v/%v/%v", out["requested_at"], out["activated_at"], out["expires_at"])
+	}
+
+	// Waiting for an approver is not "scheduled": no times until it is approved.
+	buf.Reset()
+	if err := printActivateJSON(&buf, "Owner", "rd", "/subscriptions/s", "S", 4*time.Hour, now, start,
+		pim.RequestOutcome{Status: "PendingAdminDecision"}); err != nil {
+		t.Fatal(err)
+	}
+	out = nil
+	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out["activated_at"]; ok {
+		t.Errorf("activated_at set while awaiting approval")
+	}
+}
+
+// --start with --dry-run or --validate-only creates nothing, so it must not
+// report a schedule, even if the validate response says PendingScheduleCreation.
+func TestScheduledChecks(t *testing.T) {
+	start := time.Date(2026, 10, 1, 22, 0, 0, 0, time.UTC)
+	for _, o := range []pim.RequestOutcome{
+		{Check: "DryRun"},
+		{Check: "Validated", Status: "PendingScheduleCreation"},
+		{Check: "Validated", Status: "Provisioned"},
+	} {
+		if o.Scheduled() {
+			t.Errorf("%+v: Scheduled() = true; nothing was created", o)
+		}
+		var buf bytes.Buffer
+		if err := printActivateJSON(&buf, "Owner", "rd", "/subscriptions/s", "S", time.Hour, time.Now(), start, o); err != nil {
+			t.Fatal(err)
+		}
+		var out map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := out["activated_at"]; ok || out["status"] != o.Check {
+			t.Errorf("%+v: activated_at present = %v, status = %v; want absent, %s", o, ok, out["status"], o.Check)
 		}
 	}
 }

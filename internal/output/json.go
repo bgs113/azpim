@@ -94,6 +94,7 @@ type requestJSON struct {
 	Status        string `json:"status"`
 	Justification string `json:"justification,omitempty"`
 	RequestedAt   string `json:"requested_at,omitempty"`
+	StartsAt      string `json:"starts_at,omitempty"`
 	ExpiresAt     string `json:"expires_at,omitempty"`
 	RoleDefID     string `json:"role_definition_id"`
 }
@@ -119,6 +120,9 @@ func PrintRequestsJSON(w io.Writer, requests []pim.ScheduleRequestEntry, pending
 		}
 		if r.HasRequestedAt && !r.RequestedAt.IsZero() {
 			j.RequestedAt = r.RequestedAt.UTC().Format(time.RFC3339)
+		}
+		if !r.StartsAt.IsZero() {
+			j.StartsAt = r.StartsAt.UTC().Format(time.RFC3339)
 		}
 		if r.HasExpiry && !r.ExpiresAt.IsZero() {
 			j.ExpiresAt = r.ExpiresAt.UTC().Format(time.RFC3339)

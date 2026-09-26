@@ -15,6 +15,7 @@ type ActivateOptions struct {
 	PrincipalID   string        // object ID of the requesting principal
 	Scope         string        // ARM scope
 	Duration      time.Duration // how long to activate for
+	Start         time.Time     // when the activation begins; zero means now
 	Justification string
 	TicketNumber  string
 	TicketSystem  string
@@ -56,6 +57,16 @@ func (o RequestOutcome) Done() bool { return o.State() == "Active" || o.State() 
 
 // Pending reports whether the request is waiting on approval or provisioning.
 func (o RequestOutcome) Pending() bool { return o.State() == "Pending" }
+
+// Scheduled reports whether Azure accepted a future-start request and is
+// only waiting for its start time (not for an approver). A dry run or
+// validation created nothing, so it is never scheduled.
+func (o RequestOutcome) Scheduled() bool {
+	if o.Check != "" {
+		return false
+	}
+	return o.Done() || o.Status == string(armauthorization.StatusPendingScheduleCreation)
+}
 
 // outcomeFromStatus classifies a submitted request's status. Statuses that mean
 // Azure rejected the request (denied, failed, timed out, canceled) are errors.
@@ -107,6 +118,10 @@ func (c *Clients) submit(ctx context.Context, scope string, req armauthorization
 func (c *Clients) Activate(ctx context.Context, opts ActivateOptions) (RequestOutcome, error) {
 	iso := durationToISO8601(opts.Duration)
 	req := buildScheduleRequest(armauthorization.RequestTypeSelfActivate, opts.RoleDefID, opts.PrincipalID, &iso, opts.Justification, opts.TicketNumber, opts.TicketSystem)
+	if !opts.Start.IsZero() {
+		start := opts.Start.UTC()
+		req.Properties.ScheduleInfo.StartDateTime = &start
+	}
 	o, err := c.submit(ctx, opts.Scope, req)
 	if err != nil {
 		return o, fmt.Errorf("activate role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)

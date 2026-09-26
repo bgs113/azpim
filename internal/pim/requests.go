@@ -16,10 +16,11 @@ type ScheduleRequestEntry struct {
 	ScopeDisplay   string // human-readable scope name
 	ResourceType   string
 	RequestType    string // "Activate", "Extend", "Deactivate", or raw ARM value
-	Status         string // "Active", "Pending", "Denied", "Failed", "Canceled", or raw ARM value
+	Status         string // "Active", "Scheduled", "Pending", "Denied", "Failed", "Canceled", or raw ARM value
 	Justification  string
 	RequestedAt    time.Time
 	HasRequestedAt bool
+	StartsAt       time.Time // zero if Azure did not report a start time
 	ExpiresAt      time.Time
 	HasExpiry      bool
 	RoleDefID      string
@@ -66,6 +67,11 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 				hasRequestedAt = true
 			}
 
+			var startsAt time.Time
+			if p.ScheduleInfo != nil && p.ScheduleInfo.StartDateTime != nil {
+				startsAt = *p.ScheduleInfo.StartDateTime
+			}
+
 			var expiresAt time.Time
 			hasExpiry := false
 			if p.ScheduleInfo != nil && p.ScheduleInfo.Expiration != nil {
@@ -85,10 +91,11 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 				ScopeDisplay:   scopeName,
 				ResourceType:   resourceTypeFromScope(scopeStr),
 				RequestType:    humanizeRequestType(p.RequestType),
-				Status:         humanizeRequestStatus(p.Status),
+				Status:         requestState(p.Status, startsAt, time.Now()),
 				Justification:  PtrString(p.Justification),
 				RequestedAt:    requestedAt,
 				HasRequestedAt: hasRequestedAt,
+				StartsAt:       startsAt,
 				ExpiresAt:      expiresAt,
 				HasExpiry:      hasExpiry,
 				RoleDefID:      roleDefID,
@@ -96,6 +103,16 @@ func (c *Clients) ListRequests(ctx context.Context, scope string) ([]ScheduleReq
 		}
 	}
 	return out, nil
+}
+
+// requestState is humanizeRequestStatus, except that a request Azure has
+// accepted but whose start time is still ahead shows as "Scheduled".
+func requestState(s *armauthorization.Status, start, now time.Time) string {
+	state := humanizeRequestStatus(s)
+	if start.After(now) && (state == "Active" || (s != nil && *s == armauthorization.StatusPendingScheduleCreation)) {
+		return "Scheduled"
+	}
+	return state
 }
 
 func humanizeRequestType(rt *armauthorization.RequestType) string {
