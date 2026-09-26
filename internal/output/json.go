@@ -1,3 +1,4 @@
+// Package output renders PIM assignments and requests as tables or JSON.
 package output
 
 import (
