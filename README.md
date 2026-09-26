@@ -4,7 +4,7 @@
 [![CodeQL](https://github.com/bgs113/azpim/actions/workflows/codeql.yml/badge.svg)](https://github.com/bgs113/azpim/actions/workflows/codeql.yml)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14199/baseline)](https://www.bestpractices.dev/projects/14199)
 
-A CLI tool for managing Azure Privileged Identity Management (PIM) role assignments for Azure Resources (RBAC). List eligible and active assignments, activate roles with interactive prompts, and deactivate them — all from the terminal.
+A CLI tool for managing Azure Privileged Identity Management (PIM) role assignments for Azure Resources (RBAC). List eligible and active assignments, activate roles (now or at a scheduled time) with interactive prompts, extend and deactivate them, and track your requests — all from the terminal. Check a request with `--dry-run` or `--validate-only` before sending it. Works in Azure public cloud, Azure US Government and Azure China.
 
 ## Prerequisites
 
@@ -246,7 +246,7 @@ docker run --rm -it \
 
 ## Building from source
 
-Requires [Go 1.26+](https://go.dev/dl/).
+Requires [Go 1.27+](https://go.dev/dl/).
 
 **Build for the current platform:**
 
@@ -272,11 +272,15 @@ go test ./...
 make snapshot   # produces dist/ artifacts via GoReleaser, no tag required
 ```
 
-**Cut a release** (requires [GoReleaser](https://goreleaser.com) — installed via `mise install`):
+**Cut a release:**
+
+1. In a PR, rename `## [Unreleased]` in `CHANGELOG.md` to `## [X.Y.Z] - YYYY-MM-DD`, add a fresh empty `## [Unreleased]` above it, and add the version's compare link at the bottom. The release workflow publishes this section as the GitHub release notes.
+2. After the PR merges, tag the merge commit on `main`:
 
 ```bash
-git tag -a v0.4.0 -m "v0.4.0"
-git push --tags   # triggers the release CI workflow automatically
+git checkout main && git pull
+git tag -a vX.Y.Z -m "vX.Y.Z"
+git push origin vX.Y.Z   # triggers the release CI workflow
 ```
 
 The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts, per-archive SPDX SBOMs, and `checksums.txt`, builds and pushes the container image to GHCR via Ko, and signs the image with keyless Cosign.
@@ -291,8 +295,9 @@ The CI workflow cross-compiles for all platforms, creates the GitHub Release wit
 2. Workload identity / managed identity
 3. **Azure CLI** (`az login`) — the most common for local use
 4. **Azure Developer CLI** (`azd auth login`)
+5. **Azure PowerShell** (`Connect-AzAccount`)
 
-For personal use, log in with either the Azure CLI or the Azure Developer CLI:
+For personal use, log in with the Azure CLI, the Azure Developer CLI or Azure PowerShell:
 
 ```bash
 az login
@@ -300,7 +305,11 @@ az login
 azd auth login
 ```
 
-> **Note:** Azure PowerShell (`Connect-AzAccount`) is not supported — it is not included in the Go SDK's `DefaultAzureCredential` chain.
+Because environment variables come first, a service principal secret left in `AZURE_CLIENT_ID` / `AZURE_CLIENT_SECRET` takes precedence over your `az login`. So that this can't go unnoticed, `activate`, `deactivate` and `extend` print the identity they act as to stderr before changing anything:
+
+```text
+Acting as alice@contoso.com (tenant 72f988bf-…)
+```
 
 ### Sovereign clouds
 
@@ -323,13 +332,13 @@ azpim eligible --cloud usgov
 
 All commands accept the same scope flags to target a specific part of your Azure hierarchy:
 
-| Flag                                        | Description        | ARM Scope                                                     |
-| ------------------------------------------- | ------------------ | ------------------------------------------------------------- |
-| `--subscription <id>`                       | Subscription       | `/subscriptions/<id>`                                         |
-| `--subscription <id> --resource-group <rg>` | Resource group     | `/subscriptions/<id>/resourceGroups/<rg>`                     |
-| `--management-group <id or name>`           | Management group   | `/providers/Microsoft.Management/managementGroups/<id>`       |
-| `--management-group /`                      | Tenant root group  | `/providers/Microsoft.Management/managementGroups/<tenantId>` |
-| `--scope <arm-scope>`                       | Explicit ARM scope | (as provided)                                                 |
+| Flag                                                | Description        | ARM Scope                                                     |
+| --------------------------------------------------- | ------------------ | ------------------------------------------------------------- |
+| `--subscription <id or name>`                       | Subscription       | `/subscriptions/<id>`                                         |
+| `--subscription <id or name> --resource-group <rg>` | Resource group     | `/subscriptions/<id>/resourceGroups/<rg>`                     |
+| `--management-group <id or name>`                   | Management group   | `/providers/Microsoft.Management/managementGroups/<id>`       |
+| `--management-group /`                              | Tenant root group  | `/providers/Microsoft.Management/managementGroups/<tenantId>` |
+| `--scope <arm-scope>`                               | Explicit ARM scope | (as provided)                                                 |
 
 If no scope is specified, `azpim` lists your assignments across the whole tenant in a single query (the same view as "My roles" in the Azure Portal).
 
@@ -339,10 +348,10 @@ The scope flags don't read environment variables, so a subscription left in `AZU
 
 ### Output flags
 
-| Flag                       | Description                                                    |
-| -------------------------- | -------------------------------------------------------------- |
-| `-o, --output table\|json` | Output format (default: `table`)                               |
-| `--human`                  | Human-readable time format (`1h 32m 5s` instead of `01:32:05`) |
+| Flag                       | Description                                                                                                    |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `-o, --output table\|json` | Output format (default: `table`). On every command that lists or changes assignments                         |
+| `--human`                  | Human-readable TIME REMAINING in `azpim active` (`1h 32m 5s` instead of `01:32:05`). `eligible` and `requests` accept it but show no durations |
 
 ---
 
@@ -479,6 +488,25 @@ azpim extend --subscription <id> --role "Contributor" --duration 4h
 | `--ticket-number <num>`      | Ticket or incident number                                                                    |
 | `--ticket-system <url>`      | Ticket system URL                                                                            |
 | `-o, --output table\|json`   | Output format (default: `table`)                                                             |
+
+---
+
+### `azpim requests` — List your requests
+
+List your role assignment schedule requests: your own activate, extend and deactivate requests, plus any an admin made on your behalf. Use it to follow a request that is pending approval or scheduled for later.
+
+```bash
+azpim requests
+azpim requests --pending                 # only requests awaiting admin approval
+azpim requests --subscription <id>
+azpim requests --output json
+```
+
+**Flags:** the [scope flags](#scope-flags), `-o, --output table|json`, and `--pending`.
+
+**Table output columns:** ROLE · SCOPE · TYPE · STATUS · REQUESTED · EXPIRES · JUSTIFICATION
+
+TYPE is `Activate`, `Extend` or `Deactivate` for your own requests, and Azure's own value (e.g. `AdminAssign`) for requests an admin made. STATUS is color-coded: **green** = Active, **yellow** = Pending (waiting for an approver) or Scheduled (accepted, with a `--start` time still ahead), **red** = Denied/Failed. JSON output also includes `starts_at` when Azure reports a start time.
 
 ---
 
