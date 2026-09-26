@@ -12,6 +12,7 @@ import (
 )
 
 var (
+	extendCheck         checkFlags
 	extendScope         scopeFlags
 	extendRole          string
 	extendDuration      string
@@ -43,6 +44,7 @@ Examples:
 		}
 
 		ctx := cmd.Context()
+		extendCheck.apply(clients)
 		principalID, err := resolvePrincipal(ctx, cred)
 		if err != nil {
 			return err
@@ -112,6 +114,7 @@ Examples:
 
 func init() {
 	addScopeFlags(extendCmd, &extendScope)
+	addCheckFlags(extendCmd, &extendCheck)
 	extendCmd.Flags().StringVar(&extendRole, "role", "", "Role name to extend (interactive if omitted)")
 	extendCmd.Flags().StringVarP(&extendDuration, "duration", "d", "", "New duration from now, e.g. 4h or 4h30m (prompts if omitted)")
 	extendCmd.Flags().StringVarP(&extendJustification, "justification", "j", "", "Justification text (prompts if omitted)")

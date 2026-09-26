@@ -472,6 +472,24 @@ azpim extend --subscription <id> --role "Contributor" --duration 4h
 
 ---
 
+### Checking a request without sending it
+
+`activate`, `deactivate` and `extend` accept two flags (use one or the other):
+
+| Flag              | What it does                                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--dry-run`       | Resolves the role, scope, duration and justification, prints what would be sent, and sends nothing to Azure                                                                                                  |
+| `--validate-only` | Sends the request to Azure's validation endpoint, which checks it against the role policy (maximum duration, justification and ticket rules) without creating anything. Exits non-zero with Azure's reason if it fails |
+
+JSON output reports `"status": "DryRun"` or `"status": "Validated"`. Both flags skip the `deactivate --all` confirmation, since nothing is deactivated.
+
+```bash
+azpim activate --role Owner --subscription Prod -d 8h -j "CHG-1234" --validate-only
+azpim deactivate --all --dry-run
+```
+
+---
+
 ## Examples
 
 ```bash

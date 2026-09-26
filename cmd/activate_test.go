@@ -255,3 +255,35 @@ func TestOutcomeLine(t *testing.T) {
 		}
 	}
 }
+
+func TestOutcomeLineChecks(t *testing.T) {
+	if got, want := outcomeLine(pim.RequestOutcome{Check: "DryRun"}, "Extension", "Reader", "✓ done"),
+		`Dry run: extension request for "Reader" not sent.`; got != want {
+		t.Errorf("dry run: got %q, want %q", got, want)
+	}
+	// A validated request must not claim success even though Azure's status is Provisioned.
+	if got, want := outcomeLine(pim.RequestOutcome{Check: "Validated", Status: "Provisioned"}, "Extension", "Reader", "✓ done"),
+		`✓ Extension request for "Reader" passed Azure's validation. Nothing was submitted.`; got != want {
+		t.Errorf("validated: got %q, want %q", got, want)
+	}
+}
+
+func TestPrintActivateJSONChecks(t *testing.T) {
+	for _, check := range []string{"DryRun", "Validated"} {
+		var buf bytes.Buffer
+		if err := printActivateJSON(&buf, "Owner", "rd", "/subscriptions/s", "S", time.Hour, time.Now(),
+			pim.RequestOutcome{Check: check, Status: "Provisioned"}); err != nil {
+			t.Fatal(err)
+		}
+		var out map[string]any
+		if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+			t.Fatal(err)
+		}
+		if out["status"] != check {
+			t.Errorf("status = %v, want %s", out["status"], check)
+		}
+		if _, ok := out["activated_at"]; ok {
+			t.Errorf("%s: activated_at set; nothing was activated", check)
+		}
+	}
+}

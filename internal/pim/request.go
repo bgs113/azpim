@@ -20,17 +20,30 @@ type ActivateOptions struct {
 	TicketSystem  string
 }
 
+// Mode controls what Activate, Deactivate and Extend do with the request they build.
+type Mode int
+
+const (
+	Submit       Mode = iota // create the request (default)
+	DryRun                   // build the request and send nothing
+	ValidateOnly             // ask ARM to validate the request without creating it
+)
+
 // RequestOutcome is the status Azure reported for a newly submitted schedule
 // request. Azure can accept a request without it taking effect yet (for
 // example while it waits for approval), so callers must check Done before
 // reporting success.
 type RequestOutcome struct {
 	Status string // raw API status, e.g. "Provisioned" or "PendingAdminDecision"; empty if not reported
+	Check  string // "DryRun" or "Validated" when the request was not submitted
 }
 
 // State returns the status as `azpim requests` shows it ("Active", "Pending",
 // "Revoked", ...), or the raw status when it has no friendlier name.
 func (o RequestOutcome) State() string {
+	if o.Check != "" {
+		return o.Check
+	}
 	if o.Status == "" {
 		return ""
 	}
@@ -60,8 +73,25 @@ func outcomeFromStatus(s *armauthorization.Status) (RequestOutcome, error) {
 
 // submit creates a role assignment schedule request and returns the status
 // Azure reported for it. Activate, Deactivate and Extend all go through here
-// so none of them can report success without checking that status.
+// so none of them can report success without checking that status, and
+// c.Mode can stop all of them from creating anything.
 func (c *Clients) submit(ctx context.Context, scope string, req armauthorization.RoleAssignmentScheduleRequest) (RequestOutcome, error) {
+	switch c.Mode {
+	case DryRun:
+		return RequestOutcome{Check: "DryRun"}, nil
+	case ValidateOnly:
+		resp, err := c.Requests.Validate(ctx, scope, uuid.New().String(), req, nil)
+		if err != nil {
+			return RequestOutcome{}, fmt.Errorf("validation failed: %w", err)
+		}
+		var status *armauthorization.Status
+		if resp.Properties != nil {
+			status = resp.Properties.Status
+		}
+		o, err := outcomeFromStatus(status)
+		o.Check = "Validated"
+		return o, err
+	}
 	resp, err := c.Requests.Create(ctx, scope, uuid.New().String(), req, nil)
 	if err != nil {
 		return RequestOutcome{}, err
