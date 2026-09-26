@@ -323,13 +323,13 @@ azpim eligible --cloud usgov
 
 All commands accept the same scope flags to target a specific part of your Azure hierarchy:
 
-| Flag                                        | Description        | ARM Scope                                                     |
-| ------------------------------------------- | ------------------ | ------------------------------------------------------------- |
-| `--subscription <id>`                       | Subscription       | `/subscriptions/<id>`                                         |
-| `--subscription <id> --resource-group <rg>` | Resource group     | `/subscriptions/<id>/resourceGroups/<rg>`                     |
-| `--management-group <id or name>`           | Management group   | `/providers/Microsoft.Management/managementGroups/<id>`       |
-| `--management-group /`                      | Tenant root group  | `/providers/Microsoft.Management/managementGroups/<tenantId>` |
-| `--scope <arm-scope>`                       | Explicit ARM scope | (as provided)                                                 |
+| Flag                                                | Description        | ARM Scope                                                     |
+| --------------------------------------------------- | ------------------ | ------------------------------------------------------------- |
+| `--subscription <id or name>`                       | Subscription       | `/subscriptions/<id>`                                         |
+| `--subscription <id or name> --resource-group <rg>` | Resource group     | `/subscriptions/<id>/resourceGroups/<rg>`                     |
+| `--management-group <id or name>`                   | Management group   | `/providers/Microsoft.Management/managementGroups/<id>`       |
+| `--management-group /`                              | Tenant root group  | `/providers/Microsoft.Management/managementGroups/<tenantId>` |
+| `--scope <arm-scope>`                               | Explicit ARM scope | (as provided)                                                 |
 
 If no scope is specified, `azpim` lists your assignments across the whole tenant in a single query (the same view as "My roles" in the Azure Portal).
 
