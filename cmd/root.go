@@ -190,7 +190,7 @@ func addScopeFlags(cmd *cobra.Command, flags *scopeFlags) {
 	cmd.Flags().StringVar(&flags.Scope, "scope", "", "Full ARM scope (overrides other scope flags)")
 	cmd.Flags().StringVarP(&flags.ManagementGroup, "management-group", "m", "", `Management group ID or name (use "/" for tenant root group)`)
 	cmd.Flags().StringVar(&flags.TenantID, "tenant-id", os.Getenv("AZURE_TENANT_ID"), "Azure tenant ID (auto-detected from credentials if omitted)")
-	cmd.Flags().StringVarP(&flags.Subscription, "subscription", "s", os.Getenv("AZURE_SUBSCRIPTION_ID"), "Subscription ID or name")
+	cmd.Flags().StringVarP(&flags.Subscription, "subscription", "s", "", "Subscription ID or name")
 	cmd.Flags().StringVarP(&flags.ResourceGroup, "resource-group", "g", "", "Resource group name (requires --subscription)")
 }
 
