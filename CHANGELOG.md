@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-25
+
 ### Added
 - `go install github.com/bgs113/azpim@latest` now works: the module path is `github.com/bgs113/azpim` (was `azpim`), so the Go module proxy and pkg.go.dev can find it ([#34](https://github.com/bgs113/azpim/issues/34)). Binaries built this way report their module version in `azpim version`.
 - `activate`, `deactivate` and `extend` print the identity they act as (`Acting as alice@contoso.com (tenant …)`, or `service principal <appid>`) to stderr before changing anything, so a service-principal secret left in `AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET` can't elevate unnoticed. JSON on stdout is unchanged ([#29](https://github.com/bgs113/azpim/issues/29)).
@@ -77,7 +79,8 @@ First public release.
 - Sign release binaries and container images with Cosign; publish SBOMs.
 - Add MIT license.
 
-[Unreleased]: https://github.com/bgs113/azpim/compare/v1.0.2...HEAD
+[Unreleased]: https://github.com/bgs113/azpim/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/bgs113/azpim/compare/v1.0.2...v1.1.0
 [1.0.2]: https://github.com/bgs113/azpim/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bgs113/azpim/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bgs113/azpim/releases/tag/v1.0.0
