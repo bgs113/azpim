@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"azpim/internal/pim"
+	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/olekukonko/tablewriter"
 	"github.com/olekukonko/tablewriter/renderer"

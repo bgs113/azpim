@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"azpim/internal/auth"
-	"azpim/internal/pim"
+	"github.com/bgs113/azpim/internal/auth"
+	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"

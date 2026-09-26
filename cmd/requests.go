@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"azpim/internal/auth"
-	"azpim/internal/output"
-	"azpim/internal/pim"
+	"github.com/bgs113/azpim/internal/auth"
+	"github.com/bgs113/azpim/internal/output"
+	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/spf13/cobra"
 )

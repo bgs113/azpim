@@ -1,4 +1,4 @@
-module azpim
+module github.com/bgs113/azpim
 
 go 1.27.1
 
