@@ -58,7 +58,8 @@ docker_signs:
 # Deliberately a Formula, not a Cask, despite GoReleaser's `brews` deprecation
 # warning. Casks re-apply macOS's quarantine attribute, so Gatekeeper blocks the
 # un-notarized binary (PR #7, CHANGELOG 1.0.1), and Homebrew 5.0 removed the
-# --no-quarantine escape hatch.
+# --no-quarantine escape hatch. A Cask only becomes an option if the macOS
+# binaries are signed and notarized (GoReleaser `notarize`, Apple Developer ID).
 #
 # The Formula installs the release ZIPs built and checksummed here, so Homebrew
 # users get the same artifacts that checksums.txt signs and the SBOMs describe.
@@ -79,7 +80,7 @@ brews:
     install: |
       bin.install "azpim"
     test: |
-      system "#{bin}/azpim", "version"
+      system bin/"azpim", "version"
 
 sboms:
   - artifacts: archive
