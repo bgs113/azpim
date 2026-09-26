@@ -21,6 +21,7 @@ type Clients struct {
 	PolicyAssignments *armauthorization.RoleManagementPolicyAssignmentsClient
 	Policies          *armauthorization.RoleManagementPoliciesClient
 	Subscriptions     *armsubscriptions.Client
+	Mode              Mode // whether Activate, Deactivate and Extend send, validate or only build requests
 	cred              azcore.TokenCredential
 	mu                sync.Mutex
 	// policyCache caches FetchMaxActivationDuration results keyed by "roleGUID|scope".

@@ -13,6 +13,7 @@ import (
 )
 
 var (
+	deactivateCheck        checkFlags
 	deactivateScope        scopeFlags
 	deactivateRole         string
 	deactivateAll          bool
@@ -30,7 +31,8 @@ If --role is omitted, an interactive list of active assignments is presented.
 Examples:
   azpim deactivate                                           # interactive, all scopes
   azpim deactivate --subscription <id> --role "Contributor"
-  azpim deactivate --all --yes                               # deactivate all without prompting`,
+  azpim deactivate --all --yes                               # deactivate all without prompting
+  azpim deactivate --all --dry-run                           # show what would be deactivated`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cred, clients, err := connect()
 		if err != nil {
@@ -38,6 +40,7 @@ Examples:
 		}
 
 		ctx := cmd.Context()
+		deactivateCheck.apply(clients)
 		principalID, err := resolvePrincipal(ctx, cred)
 		if err != nil {
 			return err
@@ -62,7 +65,7 @@ Examples:
 			for _, a := range active {
 				fmt.Fprintf(os.Stderr, "  • %-40s  %s  (%s remaining)\n", a.RoleName, a.Resource, a.TimeRemaining(false))
 			}
-			if !deactivateYes {
+			if !deactivateYes && clients.Mode == pim.Submit {
 				fmt.Fprintf(os.Stderr, "Deactivate all %d role(s)? [y/N] ", len(active))
 				var answer string
 				fmt.Fscanln(os.Stdin, &answer) // #nosec G104
@@ -127,6 +130,7 @@ Examples:
 
 func init() {
 	addScopeFlags(deactivateCmd, &deactivateScope)
+	addCheckFlags(deactivateCmd, &deactivateCheck)
 	deactivateCmd.Flags().StringVar(&deactivateRole, "role", "", "Role name to deactivate (interactive if omitted)")
 	deactivateCmd.Flags().BoolVar(&deactivateAll, "all", false, "Deactivate all active roles (prompts for confirmation unless --yes)")
 	deactivateCmd.Flags().BoolVarP(&deactivateYes, "yes", "y", false, "Skip confirmation prompt when used with --all")

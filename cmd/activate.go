@@ -16,6 +16,7 @@ import (
 )
 
 var (
+	activateCheck         checkFlags
 	activateScope         scopeFlags
 	activateRole          string
 	activateDuration      string
@@ -37,7 +38,8 @@ Defaults to the maximum allowed by the role policy.
 
 Examples:
   azpim activate                                                              # interactive, all scopes
-  azpim activate --subscription <id> --role "Contributor" --duration 2h --justification "incident response"`,
+  azpim activate --subscription <id> --role "Contributor" --duration 2h --justification "incident response"
+  azpim activate --role "Contributor" -d 2h -j "test" --validate-only        # check against the role policy only`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cred, clients, err := connect()
 		if err != nil {
@@ -45,6 +47,7 @@ Examples:
 		}
 
 		ctx := cmd.Context()
+		activateCheck.apply(clients)
 		principalID, err := resolvePrincipal(ctx, cred)
 		if err != nil {
 			return err
@@ -138,6 +141,7 @@ Examples:
 
 func init() {
 	addScopeFlags(activateCmd, &activateScope)
+	addCheckFlags(activateCmd, &activateCheck)
 	activateCmd.Flags().StringVar(&activateRole, "role", "", "Role name to activate (interactive if omitted)")
 	activateCmd.Flags().StringVarP(&activateDuration, "duration", "d", "", "Activation duration, e.g. 4 or 4h or 4h30m (prompts if omitted)")
 	activateCmd.Flags().StringVarP(&activateJustification, "justification", "j", "", "Justification text (prompts if omitted)")

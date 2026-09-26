@@ -1,9 +1,16 @@
 package pim
 
 import (
+	"context"
+	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 )
 
@@ -59,6 +66,62 @@ func TestOutcomeFromStatus(t *testing.T) {
 		if o.Status != tt.wantStatus || o.Done() != tt.done || o.Pending() != tt.pend || (err != nil) != tt.wantErr {
 			t.Errorf("outcomeFromStatus(%q) = {Status:%q Done:%v Pending:%v} err=%v; want Status %q Done %v Pending %v err %v",
 				tt.wantStatus, o.Status, o.Done(), o.Pending(), err, tt.wantStatus, tt.done, tt.pend, tt.wantErr)
+		}
+	}
+}
+
+type fakeToken struct{}
+
+func (fakeToken) GetToken(context.Context, policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return azcore.AccessToken{Token: "t", ExpiresOn: time.Now().Add(time.Hour)}, nil
+}
+
+// recorder is an HTTP transport that records each request's method and
+// answers Create (PUT, 201) and Validate (POST, 200) with a Provisioned status.
+type recorder struct{ methods []string }
+
+func (r *recorder) Do(req *http.Request) (*http.Response, error) {
+	r.methods = append(r.methods, req.Method)
+	code := http.StatusOK
+	if req.Method == http.MethodPut {
+		code = http.StatusCreated
+	}
+	return &http.Response{
+		StatusCode: code,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body:       io.NopCloser(strings.NewReader(`{"properties":{"status":"Provisioned"}}`)),
+		Request:    req,
+	}, nil
+}
+
+func TestSubmitModes(t *testing.T) {
+	tests := []struct {
+		mode        Mode
+		wantMethods string
+		wantState   string
+	}{
+		{Submit, "PUT", "Active"},
+		{DryRun, "", "DryRun"},
+		{ValidateOnly, "POST", "Validated"},
+	}
+	for _, tt := range tests {
+		rec := &recorder{}
+		requests, err := armauthorization.NewRoleAssignmentScheduleRequestsClient(fakeToken{},
+			&arm.ClientOptions{ClientOptions: policy.ClientOptions{Transport: rec}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := &Clients{Requests: requests, Mode: tt.mode}
+		o, err := c.Activate(context.Background(), ActivateOptions{Scope: "/subscriptions/s", Duration: time.Hour})
+		if err != nil {
+			t.Errorf("mode %d: %v", tt.mode, err)
+			continue
+		}
+		if got := strings.Join(rec.methods, ","); got != tt.wantMethods {
+			t.Errorf("mode %d: sent %q, want %q", tt.mode, got, tt.wantMethods)
+		}
+		if o.State() != tt.wantState {
+			t.Errorf("mode %d: state %q, want %q", tt.mode, o.State(), tt.wantState)
 		}
 	}
 }

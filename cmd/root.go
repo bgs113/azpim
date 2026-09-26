@@ -89,6 +89,10 @@ func friendlyError(err error) string {
 // Azure confirmed the change took effect, otherwise a line saying it has not.
 func outcomeLine(o pim.RequestOutcome, action, role, done string) string {
 	switch {
+	case o.State() == "DryRun":
+		return fmt.Sprintf("Dry run: %s request for %q not sent.", strings.ToLower(action), role)
+	case o.State() == "Validated":
+		return fmt.Sprintf("✓ %s request for %q passed Azure's validation. Nothing was submitted.", action, role)
 	case o.Done():
 		return done
 	case o.Pending():
@@ -153,6 +157,30 @@ func connect() (*auth.Credential, *pim.Clients, error) {
 		return nil, nil, err
 	}
 	return cred, clients, nil
+}
+
+// checkFlags are --dry-run and --validate-only, shared by the write commands.
+type checkFlags struct {
+	DryRun       bool
+	ValidateOnly bool
+}
+
+func addCheckFlags(cmd *cobra.Command, f *checkFlags) {
+	cmd.Flags().BoolVar(&f.DryRun, "dry-run", false, "Show the request that would be sent, without sending anything")
+	cmd.Flags().BoolVar(&f.ValidateOnly, "validate-only", false, "Have Azure validate the request against the role policy, without creating it")
+	cmd.MarkFlagsMutuallyExclusive("dry-run", "validate-only")
+}
+
+// apply sets the clients' request mode and says on stderr when nothing will be submitted.
+func (f checkFlags) apply(c *pim.Clients) {
+	switch {
+	case f.DryRun:
+		c.Mode = pim.DryRun
+		fmt.Fprintln(os.Stderr, "Dry run: nothing will be sent to Azure.")
+	case f.ValidateOnly:
+		c.Mode = pim.ValidateOnly
+		fmt.Fprintln(os.Stderr, "Validate only: Azure checks the request but does not create it.")
+	}
 }
 
 // addScopeFlags registers the shared scope flags on a command.
