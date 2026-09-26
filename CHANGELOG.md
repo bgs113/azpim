@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `go install github.com/bgs113/azpim@latest` now works: the module path is `github.com/bgs113/azpim` (was `azpim`), so the Go module proxy and pkg.go.dev can find it ([#34](https://github.com/bgs113/azpim/issues/34)). Binaries built this way report their module version in `azpim version`.
+- `activate`, `deactivate` and `extend` print the identity they act as (`Acting as alice@contoso.com (tenant …)`, or `service principal <appid>`) to stderr before changing anything, so a service-principal secret left in `AZURE_CLIENT_ID`/`AZURE_CLIENT_SECRET` can't elevate unnoticed. JSON on stdout is unchanged ([#29](https://github.com/bgs113/azpim/issues/29)).
+
 
 ### Changed
 - JSON output of `activate`, `extend` and `deactivate`: `status` now uses the same values as `azpim requests` (`Active`, `Pending`, …), and a new `azure_status` field carries Azure's raw status. `activate`'s pending value changes from `PendingApproval` to `Pending`. The time fields (`activated_at`, `extended_at`, `deactivated_at`, `expires_at`) are omitted until Azure confirms the change; `requested_at` is always set.

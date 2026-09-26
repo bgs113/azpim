@@ -219,3 +219,18 @@ func pickByLabel[T any](items []T, label string, itemLabel func(T) string) (T, e
 	}
 	return items[idx], nil
 }
+
+// resolvePrincipal returns the caller's object ID for write commands and
+// prints, to stderr, the identity azpim is acting as. DefaultAzureCredential
+// prefers AZURE_CLIENT_ID/SECRET over az login, so a leftover service principal
+// secret would otherwise elevate silently as that principal.
+func resolvePrincipal(ctx context.Context, cred azcore.TokenCredential) (string, error) {
+	principalID, err := auth.ResolvePrincipalID(ctx, cred)
+	if err != nil {
+		return "", fmt.Errorf("resolve principal ID: %w", err)
+	}
+	if who, err := auth.ResolveIdentity(ctx, cred); err == nil {
+		fmt.Fprintf(os.Stderr, "Acting as %s\n", who)
+	}
+	return principalID, nil
+}
