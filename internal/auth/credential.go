@@ -1,3 +1,6 @@
+// Package auth creates the Azure credential azpim signs in with
+// (DefaultAzureCredential for the chosen cloud) and reads identity claims,
+// such as the principal and tenant IDs, from its access token.
 package auth
 
 import (
