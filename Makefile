@@ -48,12 +48,11 @@ check: lint vuln
 docker-build:
 	docker build --build-arg VERSION=$(VERSION) -t azpim:$(VERSION) -t azpim:latest .
 
-## docker-run: run azpim in a container, mounting host az login session and cache
+## docker-run: run azpim in a container, mounting the host az login session
 ##   Pass subcommand + flags via CMD, e.g.: make docker-run CMD="eligible --scope /"
 docker-run:
 	docker run --rm -it \
 	  -v "$(HOME)/.azure:/home/nonroot/.azure:ro" \
-	  -v "$(HOME)/.cache/azpim:/home/nonroot/.cache/azpim" \
 	  azpim:latest $(CMD)
 
 ## clean: remove build artefacts
