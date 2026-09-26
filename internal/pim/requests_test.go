@@ -2,6 +2,7 @@ package pim
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 )
@@ -72,6 +73,29 @@ func TestScheduleRequestEntryIsPending(t *testing.T) {
 		r := ScheduleRequestEntry{Status: tt.status}
 		if got := r.Status == "Pending"; got != tt.want {
 			t.Errorf("Status==%q: got %v, want %v", tt.status, got, tt.want)
+		}
+	}
+}
+
+func TestRequestState(t *testing.T) {
+	st := ptrStatus
+	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
+	future, past := now.Add(time.Hour), now.Add(-time.Hour)
+	tests := []struct {
+		status *armauthorization.Status
+		start  time.Time
+		want   string
+	}{
+		{st(armauthorization.StatusPendingScheduleCreation), future, "Scheduled"},
+		{st(armauthorization.StatusProvisioned), future, "Scheduled"},
+		{st(armauthorization.StatusProvisioned), past, "Active"},
+		{st(armauthorization.StatusPendingAdminDecision), future, "Pending"}, // still needs an approver
+		{st(armauthorization.StatusDenied), future, "Denied"},
+		{nil, future, ""},
+	}
+	for _, tt := range tests {
+		if got := requestState(tt.status, tt.start, now); got != tt.want {
+			t.Errorf("requestState(%v, start in %v) = %q, want %q", tt.status, tt.start.Sub(now), got, tt.want)
 		}
 	}
 }

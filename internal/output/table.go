@@ -219,7 +219,7 @@ func requestStatusColor(status string) string {
 	switch strings.ToLower(status) {
 	case "active":
 		return colorize(status, colorGreen)
-	case "pending":
+	case "pending", "scheduled":
 		return colorize(status, colorYellow)
 	case "denied", "failed":
 		return colorize(status, colorRed)

@@ -408,12 +408,20 @@ azpim activate \
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `--role <name>`              | Role name to activate (interactive list if omitted; prompts for scope if the name matches multiple entries)           |
 | `-d, --duration <value>`     | Duration as integer hours (`4`), or duration string (`4h30m`, `90m`) — prompts if omitted; defaults to policy maximum |
+| `--start <time>`             | Schedule the activation to start later: `22:00` (today, or tomorrow if past), `2026-10-01T22:00` (local time), or RFC 3339 |
 | `-j, --justification <text>` | Justification text (prompts if omitted)                                                                               |
 | `--ticket-number <num>`      | Ticket or incident number                                                                                             |
 | `--ticket-system <url>`      | Ticket system URL                                                                                                     |
 | `-o, --output table\|json`   | Output format (default: `table`)                                                                                      |
 
 The duration prompt defaults to the **maximum allowed by the role's management policy** and validates that the requested duration does not exceed it.
+
+To prepare access for a maintenance window, schedule the activation with `--start`. Times without a UTC offset are read in your local timezone. `azpim requests` shows the request as `Scheduled` until it starts.
+
+```bash
+azpim activate --subscription Prod --role Owner --start "2026-10-01T22:00" -d 4h -j "CHG-5678"
+azpim activate --subscription Prod --role Owner --start 22:00 -d 4h -j "CHG-5678"
+```
 
 ---
 

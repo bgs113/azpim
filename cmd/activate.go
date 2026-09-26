@@ -20,6 +20,7 @@ var (
 	activateScope         scopeFlags
 	activateRole          string
 	activateDuration      string
+	activateStart         string
 	activateJustification string
 	activateTicketNumber  string
 	activateTicketSystem  string
@@ -36,10 +37,15 @@ If --role or --justification are omitted, interactive prompts will appear.
 Duration: integer hours (e.g. 4), or duration string (e.g. 4h30m, 90m).
 Defaults to the maximum allowed by the role policy.
 
+Start: --start schedules the activation for later instead of now. Accepts
+RFC 3339 (2026-10-01T22:00:00Z), a local date and time (2026-10-01T22:00), or
+a local time (22:00: today, or tomorrow if that time has passed).
+
 Examples:
   azpim activate                                                              # interactive, all scopes
   azpim activate --subscription <id> --role "Contributor" --duration 2h --justification "incident response"
-  azpim activate --role "Contributor" -d 2h -j "test" --validate-only        # check against the role policy only`,
+  azpim activate --role "Contributor" -d 2h -j "test" --validate-only        # check against the role policy only
+  azpim activate --subscription Prod --role Owner --start 22:00 -d 4h -j "CHG-5678"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cred, clients, err := connect()
 		if err != nil {
@@ -48,6 +54,13 @@ Examples:
 
 		ctx := cmd.Context()
 		activateCheck.apply(clients)
+		var start time.Time
+		if activateStart != "" {
+			if start, err = parseStart(activateStart, time.Now()); err != nil {
+				return err
+			}
+		}
+
 		principalID, err := resolvePrincipal(ctx, cred)
 		if err != nil {
 			return err
@@ -118,12 +131,17 @@ Examples:
 			PrincipalID:   principalID,
 			Scope:         selected.Scope,
 			Duration:      dur,
+			Start:         start,
 			Justification: justification,
 			TicketNumber:  activateTicketNumber,
 			TicketSystem:  activateTicketSystem,
 		}
 
-		fmt.Fprintf(os.Stderr, "Activating %q for %s...\n", selected.RoleName, pim.FormatDuration(dur))
+		if start.IsZero() {
+			fmt.Fprintf(os.Stderr, "Activating %q for %s...\n", selected.RoleName, pim.FormatDuration(dur))
+		} else {
+			fmt.Fprintf(os.Stderr, "Scheduling %q for %s from %s...\n", selected.RoleName, pim.FormatDuration(dur), start.Format(startLayout))
+		}
 		outcome, err := clients.Activate(ctx, opts)
 		if err != nil {
 			return err
@@ -131,7 +149,11 @@ Examples:
 
 		now := time.Now()
 		if activateOutputFormat == "json" {
-			return printActivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.ScopeDisplay, dur, now, outcome)
+			return printActivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.ScopeDisplay, dur, now, start, outcome)
+		}
+		if !start.IsZero() && outcome.Scheduled() {
+			fmt.Fprintf(os.Stdout, "✓ Role %q scheduled for %s from %s at %q\n", selected.RoleName, pim.FormatDuration(dur), start.Format(startLayout), selected.ScopeDisplay)
+			return nil
 		}
 		fmt.Fprintln(os.Stdout, outcomeLine(outcome, "Activation", selected.RoleName,
 			fmt.Sprintf("✓ Role %q activated for %s at %q", selected.RoleName, pim.FormatDuration(dur), selected.ScopeDisplay)))
@@ -144,6 +166,7 @@ func init() {
 	addCheckFlags(activateCmd, &activateCheck)
 	activateCmd.Flags().StringVar(&activateRole, "role", "", "Role name to activate (interactive if omitted)")
 	activateCmd.Flags().StringVarP(&activateDuration, "duration", "d", "", "Activation duration, e.g. 4 or 4h or 4h30m (prompts if omitted)")
+	activateCmd.Flags().StringVar(&activateStart, "start", "", "Start the activation later: 22:00, 2026-10-01T22:00 (local time) or RFC 3339")
 	activateCmd.Flags().StringVarP(&activateJustification, "justification", "j", "", "Justification text (prompts if omitted)")
 	activateCmd.Flags().StringVar(&activateTicketNumber, "ticket-number", "", "Ticket/incident number")
 	activateCmd.Flags().StringVar(&activateTicketSystem, "ticket-system", "", "Ticket system URL")
@@ -229,6 +252,43 @@ func parseDurationInput(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
+// startLayout is how a scheduled start time is shown to the user.
+const startLayout = "2006-01-02 15:04 MST"
+
+// startGrace is how far in the past --start may be, to allow for clock skew.
+const startGrace = 5 * time.Minute
+
+// parseStart parses --start in now's location. It accepts RFC 3339, a date
+// and time, or a time of day, which means the next time the clock shows it.
+func parseStart(s string, now time.Time) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	loc := now.Location()
+	t, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		t, err = time.ParseInLocation("2006-01-02T15:04", s, loc)
+	}
+	if err != nil {
+		t, err = time.ParseInLocation("2006-01-02 15:04", s, loc)
+	}
+	if err != nil {
+		clock, cerr := time.ParseInLocation("15:04", s, loc)
+		if cerr != nil {
+			return time.Time{}, fmt.Errorf("invalid --start %q: use 22:00, 2026-10-01T22:00 or RFC 3339", s)
+		}
+		y, m, d := now.Date()
+		// time.Date, not Add(24h), so a DST change overnight keeps the wall-clock time.
+		t = time.Date(y, m, d, clock.Hour(), clock.Minute(), 0, 0, loc)
+		if !t.After(now) {
+			t = time.Date(y, m, d+1, clock.Hour(), clock.Minute(), 0, 0, loc)
+		}
+		return t, nil
+	}
+	if t.Before(now.Add(-startGrace)) {
+		return time.Time{}, fmt.Errorf("--start %s is in the past", t.In(loc).Format(startLayout))
+	}
+	return t, nil
+}
+
 // promptJustification prompts interactively for a non-empty justification string.
 func promptJustification() (string, error) {
 	for {
@@ -259,8 +319,9 @@ type activateResult struct {
 }
 
 // printActivateJSON writes the result. activated_at and expires_at are only
-// set once Azure confirms the activation took effect.
-func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now time.Time, o pim.RequestOutcome) error {
+// set once Azure confirms the activation took effect or, for a scheduled
+// activation (start is non-zero), is scheduled; they then count from start.
+func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now, start time.Time, o pim.RequestOutcome) error {
 	r := activateResult{
 		RoleName:        roleName,
 		RoleDefID:       roleDefID,
@@ -272,7 +333,11 @@ func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay str
 		Status:          o.State(),
 		AzureStatus:     o.Status,
 	}
-	if o.Done() {
+	switch {
+	case !start.IsZero() && o.Scheduled():
+		r.ActivatedAt = start.UTC().Format(time.RFC3339)
+		r.ExpiresAt = start.Add(dur).UTC().Format(time.RFC3339)
+	case o.Done():
 		r.ActivatedAt = r.RequestedAt
 		r.ExpiresAt = now.Add(dur).UTC().Format(time.RFC3339)
 	}
