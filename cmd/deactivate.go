@@ -77,26 +77,27 @@ Examples:
 				}
 			}
 			now := time.Now()
-			var deactivated []pim.ActiveAssignment
+			var results []deactivateResult
 			var failed []string
 			for _, a := range active {
 				fmt.Fprintf(os.Stderr, "Deactivating %q...\n", a.RoleName)
-				if err := clients.Deactivate(ctx, pim.DeactivateOptions{
+				outcome, err := clients.Deactivate(ctx, pim.DeactivateOptions{
 					RoleDefID:   a.RoleDefID,
 					PrincipalID: principalID,
 					Scope:       a.Scope,
-				}); err != nil {
+				})
+				if err != nil {
 					fmt.Fprintf(os.Stderr, "  error: %v\n", err)
 					failed = append(failed, a.RoleName)
 					continue
 				}
-				deactivated = append(deactivated, a)
+				results = append(results, newDeactivateResult(a.RoleName, a.RoleDefID, a.Scope, a.Resource, now, outcome))
 				if deactivateOutputFormat != "json" {
-					fmt.Fprintf(os.Stdout, "✓ Role %q deactivated\n", a.RoleName)
+					fmt.Fprintln(os.Stdout, outcomeLine(outcome, "Deactivation", a.RoleName, fmt.Sprintf("✓ Role %q deactivated", a.RoleName)))
 				}
 			}
 			if deactivateOutputFormat == "json" {
-				if err := printDeactivateAllJSON(os.Stdout, deactivated, now); err != nil {
+				if err := writeJSON(os.Stdout, results); err != nil {
 					return err
 				}
 			}
@@ -106,25 +107,25 @@ Examples:
 			return nil
 		}
 
-		selected, err := selectActive(active, deactivateRole)
+		selected, err := selectActive(active, deactivateRole, "deactivate")
 		if err != nil {
 			return err
 		}
 
 		fmt.Fprintf(os.Stderr, "Deactivating %q...\n", selected.RoleName)
-		if err := clients.Deactivate(ctx, pim.DeactivateOptions{
+		outcome, err := clients.Deactivate(ctx, pim.DeactivateOptions{
 			RoleDefID:   selected.RoleDefID,
 			PrincipalID: principalID,
 			Scope:       selected.Scope,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
 
-		now := time.Now()
 		if deactivateOutputFormat == "json" {
-			return printDeactivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.Resource, now)
+			return writeJSON(os.Stdout, newDeactivateResult(selected.RoleName, selected.RoleDefID, selected.Scope, selected.Resource, time.Now(), outcome))
 		}
-		fmt.Fprintf(os.Stdout, "✓ Role %q deactivated successfully\n", selected.RoleName)
+		fmt.Fprintln(os.Stdout, outcomeLine(outcome, "Deactivation", selected.RoleName, fmt.Sprintf("✓ Role %q deactivated successfully", selected.RoleName)))
 		return nil
 	},
 }
@@ -139,7 +140,7 @@ func init() {
 
 // selectActive returns the matching active assignment. If roleFlag matches
 // multiple assignments at different scopes, the user is prompted to disambiguate.
-func selectActive(active []pim.ActiveAssignment, roleFlag string) (pim.ActiveAssignment, error) {
+func selectActive(active []pim.ActiveAssignment, roleFlag, action string) (pim.ActiveAssignment, error) {
 	if roleFlag != "" {
 		matches := matchByRoleName(active, roleFlag, func(a pim.ActiveAssignment) string { return a.RoleName })
 		if len(matches) == 0 {
@@ -150,7 +151,7 @@ func selectActive(active []pim.ActiveAssignment, roleFlag string) (pim.ActiveAss
 		}
 		return pickByLabel(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag), activeLabel)
 	}
-	return pickByLabel(active, "Select active role to deactivate", activeLabel)
+	return pickByLabel(active, "Select active role to "+action, activeLabel)
 }
 
 func activeLabel(a pim.ActiveAssignment) string {
@@ -162,34 +163,32 @@ type deactivateResult struct {
 	RoleDefID     string `json:"role_definition_id"`
 	Scope         string `json:"scope"`
 	ScopeDisplay  string `json:"scope_display"`
-	DeactivatedAt string `json:"deactivated_at"`
+	RequestedAt   string `json:"requested_at"`
+	DeactivatedAt string `json:"deactivated_at,omitempty"`
+	Status        string `json:"status"`
+	AzureStatus   string `json:"azure_status"`
 }
 
-func printDeactivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, now time.Time) error {
+// newDeactivateResult builds one JSON result. deactivated_at is only set once
+// Azure confirms the deactivation took effect.
+func newDeactivateResult(roleName, roleDefID, scope, scopeDisplay string, now time.Time, o pim.RequestOutcome) deactivateResult {
 	r := deactivateResult{
-		RoleName:      roleName,
-		RoleDefID:     roleDefID,
-		Scope:         scope,
-		ScopeDisplay:  scopeDisplay,
-		DeactivatedAt: now.UTC().Format(time.RFC3339),
+		RoleName:     roleName,
+		RoleDefID:    roleDefID,
+		Scope:        scope,
+		ScopeDisplay: scopeDisplay,
+		RequestedAt:  now.UTC().Format(time.RFC3339),
+		Status:       o.State(),
+		AzureStatus:  o.Status,
 	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+	if o.Done() {
+		r.DeactivatedAt = r.RequestedAt
+	}
+	return r
 }
 
-func printDeactivateAllJSON(w io.Writer, roles []pim.ActiveAssignment, now time.Time) error {
-	results := make([]deactivateResult, len(roles))
-	for i, a := range roles {
-		results[i] = deactivateResult{
-			RoleName:      a.RoleName,
-			RoleDefID:     a.RoleDefID,
-			Scope:         a.Scope,
-			ScopeDisplay:  a.Resource,
-			DeactivatedAt: now.UTC().Format(time.RFC3339),
-		}
-	}
+func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(results)
+	return enc.Encode(v)
 }

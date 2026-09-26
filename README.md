@@ -426,6 +426,8 @@ azpim deactivate --all
 
 Request an extension of an active (time-bound) PIM role assignment. The extension sets a new duration from the current time. Whether it is auto-approved or requires admin approval depends on the role's management policy.
 
+azpim only prints `✓` once Azure confirms the extension took effect. If the request is waiting for approval, it says so, and the role's end time doesn't change until an approver acts; track it with `azpim requests --pending`. `activate` and `deactivate` report their outcome the same way.
+
 If `--role` or `--justification` are omitted, interactive prompts appear.
 
 ```bash

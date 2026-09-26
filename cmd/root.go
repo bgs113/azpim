@@ -82,6 +82,22 @@ func friendlyError(err error) string {
 	return msg
 }
 
+// outcomeLine returns the line to print after submitting a request: done if
+// Azure confirmed the change took effect, otherwise a line saying it has not.
+func outcomeLine(o pim.RequestOutcome, action, role, done string) string {
+	switch {
+	case o.Done():
+		return done
+	case o.Pending():
+		return fmt.Sprintf("%s request for %q submitted and pending (Azure status: %s). It is not in effect yet — see 'azpim requests --pending'.", action, role, o.Status)
+	}
+	status := o.Status
+	if status == "" {
+		status = "none"
+	}
+	return fmt.Sprintf("%s request for %q submitted, but Azure did not confirm it took effect (status: %s). Check 'azpim requests' before relying on it.", action, role, status)
+}
+
 // armCodeDesc maps known ARM error codes to short descriptions,
 // falling back to "{code} (HTTP {status})" for unrecognised codes.
 func armCodeDesc(code string, status int) string {
@@ -94,6 +110,10 @@ func armCodeDesc(code string, status int) string {
 		return "no eligible assignment found at this scope"
 	case "PendingApproval", "PendingAdminDecision":
 		return "role requires admin approval before it can be activated"
+	case "RoleAssignmentDoesNotExist":
+		return "no active assignment for this role at this scope — Azure rejects changes for about 5 minutes after activation, so if you just activated it, wait and retry"
+	case "PendingRoleAssignmentRequest":
+		return "a request for this role is already pending — see 'azpim requests --pending'"
 	case "AuthorizationFailed":
 		return "permission denied"
 	case "InvalidScope":

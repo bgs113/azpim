@@ -121,19 +121,26 @@ func humanizeRequestStatus(s *armauthorization.Status) string {
 	switch *s {
 	case armauthorization.StatusProvisioned,
 		armauthorization.StatusAdminApproved,
+		armauthorization.StatusGranted,
 		armauthorization.StatusScheduleCreated:
 		return "Active"
 	case armauthorization.StatusPendingApproval,
 		armauthorization.StatusPendingApprovalProvisioning,
 		armauthorization.StatusPendingAdminDecision,
 		armauthorization.StatusPendingEvaluation,
+		armauthorization.StatusPendingExternalProvisioning,
 		armauthorization.StatusPendingProvisioning,
-		armauthorization.StatusPendingScheduleCreation:
+		armauthorization.StatusPendingRevocation,
+		armauthorization.StatusPendingScheduleCreation,
+		armauthorization.StatusProvisioningStarted:
 		return "Pending"
 	case armauthorization.StatusAdminDenied,
 		armauthorization.StatusDenied:
 		return "Denied"
-	case armauthorization.StatusFailed:
+	case armauthorization.StatusFailed,
+		armauthorization.StatusFailedAsResourceIsLocked,
+		armauthorization.StatusInvalid,
+		armauthorization.StatusTimedOut:
 		return "Failed"
 	case armauthorization.StatusCanceled:
 		return "Canceled"
