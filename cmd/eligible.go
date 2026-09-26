@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bgs113/azpim/internal/auth"
 	"github.com/bgs113/azpim/internal/output"
-	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/spf13/cobra"
 )
@@ -28,16 +26,12 @@ Scope examples:
   azpim eligible --management-group /
   azpim eligible --subscription <id> --resource-group myRG`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cred, err := auth.NewCredential()
+		cred, clients, err := connect()
 		if err != nil {
 			return err
 		}
 
 		ctx := cmd.Context()
-		clients, err := pim.NewClients(cred)
-		if err != nil {
-			return err
-		}
 		scope, err := queryScope(ctx, clients, cred, eligibleScope)
 		if err != nil {
 			return err

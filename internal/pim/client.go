@@ -7,6 +7,8 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/resources/armsubscriptions"
 )
@@ -25,10 +27,10 @@ type Clients struct {
 	policyCache map[string]time.Duration
 }
 
-// NewClients creates authorization clients. The v3 beta SDK takes no
-// subscriptionID in constructors; scope-based routing is done per-call.
-func NewClients(cred azcore.TokenCredential) (*Clients, error) {
-	opts := arm.ClientOptions{}
+// NewClients creates authorization clients for the given cloud. The SDK takes
+// no subscriptionID in constructors; scope-based routing is done per-call.
+func NewClients(cred azcore.TokenCredential, c cloud.Configuration) (*Clients, error) {
+	opts := arm.ClientOptions{ClientOptions: policy.ClientOptions{Cloud: c}}
 
 	eligible, err := armauthorization.NewRoleEligibilityScheduleInstancesClient(cred, &opts)
 	if err != nil {

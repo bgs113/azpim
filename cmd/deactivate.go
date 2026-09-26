@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bgs113/azpim/internal/auth"
 	"github.com/bgs113/azpim/internal/pim"
 	"github.com/spf13/cobra"
 )
@@ -33,16 +32,12 @@ Examples:
   azpim deactivate --subscription <id> --role "Contributor"
   azpim deactivate --all --yes                               # deactivate all without prompting`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cred, err := auth.NewCredential()
+		cred, clients, err := connect()
 		if err != nil {
 			return err
 		}
 
 		ctx := cmd.Context()
-		clients, err := pim.NewClients(cred)
-		if err != nil {
-			return err
-		}
 		principalID, err := resolvePrincipal(ctx, cred)
 		if err != nil {
 			return err

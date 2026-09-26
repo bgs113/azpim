@@ -24,6 +24,9 @@ type scopeFlags struct {
 	ResourceGroup   string
 }
 
+// cloudName is the --cloud flag: which Azure cloud to sign in to and call.
+var cloudName string
+
 // outputFlags holds output format flags.
 type outputFlags struct {
 	Format        string // "table" or "json"
@@ -126,12 +129,30 @@ func armCodeDesc(code string, status int) string {
 }
 
 func init() {
+	cloudDefault := os.Getenv("AZURE_CLOUD")
+	if cloudDefault == "" {
+		cloudDefault = "public"
+	}
+	rootCmd.PersistentFlags().StringVar(&cloudName, "cloud", cloudDefault, `Azure cloud: "public", "usgov" or "china" (env AZURE_CLOUD)`)
 	rootCmd.AddCommand(eligibleCmd)
 	rootCmd.AddCommand(activeCmd)
 	rootCmd.AddCommand(activateCmd)
 	rootCmd.AddCommand(deactivateCmd)
 	rootCmd.AddCommand(extendCmd)
 	rootCmd.AddCommand(requestsCmd)
+}
+
+// connect creates the credential and ARM clients for the --cloud cloud.
+func connect() (*auth.Credential, *pim.Clients, error) {
+	cred, err := auth.NewCredential(cloudName)
+	if err != nil {
+		return nil, nil, err
+	}
+	clients, err := pim.NewClients(cred, cred.Cloud)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cred, clients, nil
 }
 
 // addScopeFlags registers the shared scope flags on a command.
@@ -145,7 +166,7 @@ func addScopeFlags(cmd *cobra.Command, flags *scopeFlags) {
 
 // resolveScope builds a single ARM scope string from flags.
 // Used when an explicit scope is required (activate, deactivate).
-func resolveScope(ctx context.Context, cred azcore.TokenCredential, flags scopeFlags) (string, error) {
+func resolveScope(ctx context.Context, cred *auth.Credential, flags scopeFlags) (string, error) {
 	tenantID := flags.TenantID
 	if flags.ManagementGroup == "/" && tenantID == "" {
 		var err error
@@ -159,7 +180,7 @@ func resolveScope(ctx context.Context, cred azcore.TokenCredential, flags scopeF
 
 // queryScope returns the ARM scope to list assignments at: the scope named by
 // the flags, or "/" (the whole tenant, in one query) when none are set.
-func queryScope(ctx context.Context, clients *pim.Clients, cred azcore.TokenCredential, flags scopeFlags) (string, error) {
+func queryScope(ctx context.Context, clients *pim.Clients, cred *auth.Credential, flags scopeFlags) (string, error) {
 	if flags.Scope == "" && flags.ManagementGroup == "" && flags.Subscription == "" {
 		return "/", nil
 	}
@@ -224,7 +245,7 @@ func pickByLabel[T any](items []T, label string, itemLabel func(T) string) (T, e
 // prints, to stderr, the identity azpim is acting as. DefaultAzureCredential
 // prefers AZURE_CLIENT_ID/SECRET over az login, so a leftover service principal
 // secret would otherwise elevate silently as that principal.
-func resolvePrincipal(ctx context.Context, cred azcore.TokenCredential) (string, error) {
+func resolvePrincipal(ctx context.Context, cred *auth.Credential) (string, error) {
 	principalID, err := auth.ResolvePrincipalID(ctx, cred)
 	if err != nil {
 		return "", fmt.Errorf("resolve principal ID: %w", err)
