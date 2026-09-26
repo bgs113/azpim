@@ -52,7 +52,11 @@ Examples:
 		}
 
 		// Only time-bound (Activated) assignments can be deactivated.
-		active, err := clients.ListActive(ctx, scope, false)
+		var active []pim.ActiveAssignment
+		err = listAt(ctx, clients, deactivateScope, scope, func(scope string) (err error) {
+			active, err = clients.ListActive(ctx, scope, false)
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("fetch active assignments: %w", err)
 		}

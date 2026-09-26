@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/bgs113/azpim/internal/auth"
@@ -186,7 +188,7 @@ func (f checkFlags) apply(c *pim.Clients) {
 // addScopeFlags registers the shared scope flags on a command.
 func addScopeFlags(cmd *cobra.Command, flags *scopeFlags) {
 	cmd.Flags().StringVar(&flags.Scope, "scope", "", "Full ARM scope (overrides other scope flags)")
-	cmd.Flags().StringVarP(&flags.ManagementGroup, "management-group", "m", "", `Management group ID (use "/" for tenant root group)`)
+	cmd.Flags().StringVarP(&flags.ManagementGroup, "management-group", "m", "", `Management group ID or name (use "/" for tenant root group)`)
 	cmd.Flags().StringVar(&flags.TenantID, "tenant-id", os.Getenv("AZURE_TENANT_ID"), "Azure tenant ID (auto-detected from credentials if omitted)")
 	cmd.Flags().StringVarP(&flags.Subscription, "subscription", "s", os.Getenv("AZURE_SUBSCRIPTION_ID"), "Subscription ID or name")
 	cmd.Flags().StringVarP(&flags.ResourceGroup, "resource-group", "g", "", "Resource group name (requires --subscription)")
@@ -212,6 +214,10 @@ func queryScope(ctx context.Context, clients *pim.Clients, cred *auth.Credential
 	if flags.Scope == "" && flags.ManagementGroup == "" && flags.Subscription == "" {
 		return "/", nil
 	}
+	if flags.mgName() && !mgIDRe.MatchString(flags.ManagementGroup) {
+		// Not a valid management group ID, so it can only be a display name.
+		return clients.ResolveManagementGroup(ctx, flags.ManagementGroup)
+	}
 	if flags.Subscription != "" {
 		id, err := clients.ResolveSubscriptionID(ctx, flags.Subscription)
 		if err != nil {
@@ -220,6 +226,45 @@ func queryScope(ctx context.Context, clients *pim.Clients, cred *auth.Credential
 		flags.Subscription = id
 	}
 	return resolveScope(ctx, cred, flags)
+}
+
+// mgIDRe matches strings that are valid management group IDs: up to 90
+// letters, digits, hyphens, underscores, periods and parentheses.
+var mgIDRe = regexp.MustCompile(`^[\w.()-]{1,90}$`)
+
+// mgName reports whether -m may name a management group by display name:
+// it is set, is not the tenant root "/", and --scope does not override it.
+func (f scopeFlags) mgName() bool {
+	return f.Scope == "" && f.ManagementGroup != "" && f.ManagementGroup != "/"
+}
+
+// listAt runs list at scope. A display name that is also a valid ID, such as
+// "Production", is first queried as an ID; if ARM reports that management
+// group doesn't exist, listAt looks the name up and runs list once more at
+// the group it names. IDs that exist cost no extra calls.
+func listAt(ctx context.Context, clients *pim.Clients, flags scopeFlags, scope string, list func(scope string) error) error {
+	err := list(scope)
+	if err == nil || !flags.mgName() || !isNotFound(err) {
+		return err
+	}
+	resolved, rerr := clients.ResolveManagementGroup(ctx, flags.ManagementGroup)
+	if rerr != nil {
+		return rerr
+	}
+	return list(resolved)
+}
+
+// isNotFound reports whether err is ARM saying the scope does not exist.
+func isNotFound(err error) bool {
+	var respErr *azcore.ResponseError
+	if !errors.As(err, &respErr) {
+		return false
+	}
+	switch respErr.ErrorCode {
+	case "InvalidScope", "ResourceNotFound", "ManagementGroupNotFound", "NotFound":
+		return true
+	}
+	return respErr.StatusCode == http.StatusNotFound
 }
 
 // addOutputFlags registers output format flags on a command.

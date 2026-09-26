@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/bgs113/azpim/internal/output"
+	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/spf13/cobra"
 )
@@ -39,7 +40,11 @@ Scope examples:
 			return err
 		}
 
-		assignments, err := clients.ListActive(ctx, scope, activeIncludePermanent)
+		var assignments []pim.ActiveAssignment
+		err = listAt(ctx, clients, activeScope, scope, func(scope string) (err error) {
+			assignments, err = clients.ListActive(ctx, scope, activeIncludePermanent)
+			return err
+		})
 		if err != nil {
 			return err
 		}

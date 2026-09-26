@@ -327,11 +327,13 @@ All commands accept the same scope flags to target a specific part of your Azure
 | ------------------------------------------- | ------------------ | ------------------------------------------------------------- |
 | `--subscription <id>`                       | Subscription       | `/subscriptions/<id>`                                         |
 | `--subscription <id> --resource-group <rg>` | Resource group     | `/subscriptions/<id>/resourceGroups/<rg>`                     |
-| `--management-group <id>`                   | Management group   | `/providers/Microsoft.Management/managementGroups/<id>`       |
+| `--management-group <id or name>`           | Management group   | `/providers/Microsoft.Management/managementGroups/<id>`       |
 | `--management-group /`                      | Tenant root group  | `/providers/Microsoft.Management/managementGroups/<tenantId>` |
 | `--scope <arm-scope>`                       | Explicit ARM scope | (as provided)                                                 |
 
 If no scope is specified, `azpim` lists your assignments across the whole tenant in a single query (the same view as "My roles" in the Azure Portal).
+
+`--management-group` accepts a management group's ID or its display name. A display name is found among the management groups where you have an eligible or active assignment, so no permission to list management groups is needed. For a group where you only have assignments on subscriptions below it, pass the ID.
 
 The `--subscription` and `--management-group` flags also read from environment variables `AZURE_SUBSCRIPTION_ID` and `AZURE_MANAGEMENT_GROUP_ID` respectively.
 
