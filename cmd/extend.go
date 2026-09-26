@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -30,6 +29,8 @@ var extendCmd = &cobra.Command{
 
 The extension sets a new duration from the current time. Whether the extension
 is auto-approved or requires admin approval depends on the role's management policy.
+If it needs approval, azpim says the request is pending and the end time does not
+change until an approver acts; track it with 'azpim requests --pending'.
 
 If --role or --justification are omitted, interactive prompts will appear.
 
@@ -65,7 +66,7 @@ Examples:
 			return fmt.Errorf("no active (time-bound) assignments found to extend")
 		}
 
-		selected, err := selectActive(active, extendRole)
+		selected, err := selectActive(active, extendRole, "extend")
 		if err != nil {
 			return err
 		}
@@ -99,15 +100,17 @@ Examples:
 		}
 
 		fmt.Fprintf(os.Stderr, "Extending %q for %s...\n", selected.RoleName, pim.FormatDuration(dur))
-		if err := clients.Extend(ctx, opts); err != nil {
+		outcome, err := clients.Extend(ctx, opts)
+		if err != nil {
 			return err
 		}
 
 		now := time.Now()
 		if extendOutputFormat == "json" {
-			return printExtendJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.Resource, dur, now)
+			return printExtendJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.Resource, dur, now, outcome)
 		}
-		fmt.Fprintf(os.Stdout, "✓ Role %q extended for %s at %q\n", selected.RoleName, pim.FormatDuration(dur), selected.Resource)
+		fmt.Fprintln(os.Stdout, outcomeLine(outcome, "Extension", selected.RoleName,
+			fmt.Sprintf("✓ Role %q extended for %s at %q", selected.RoleName, pim.FormatDuration(dur), selected.Resource)))
 		return nil
 	},
 }
@@ -129,11 +132,16 @@ type extendResult struct {
 	ScopeDisplay    string `json:"scope_display"`
 	Duration        string `json:"duration"`
 	DurationSeconds int64  `json:"duration_seconds"`
-	ExtendedAt      string `json:"extended_at"`
-	ExpiresAt       string `json:"expires_at"`
+	RequestedAt     string `json:"requested_at"`
+	ExtendedAt      string `json:"extended_at,omitempty"`
+	ExpiresAt       string `json:"expires_at,omitempty"`
+	Status          string `json:"status"`
+	AzureStatus     string `json:"azure_status"`
 }
 
-func printExtendJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now time.Time) error {
+// printExtendJSON writes the result. extended_at and expires_at are only set
+// once Azure confirms the extension took effect.
+func printExtendJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now time.Time, o pim.RequestOutcome) error {
 	r := extendResult{
 		RoleName:        roleName,
 		RoleDefID:       roleDefID,
@@ -141,10 +149,13 @@ func printExtendJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay strin
 		ScopeDisplay:    scopeDisplay,
 		Duration:        pim.FormatDuration(dur),
 		DurationSeconds: int64(dur.Seconds()),
-		ExtendedAt:      now.UTC().Format(time.RFC3339),
-		ExpiresAt:       now.Add(dur).UTC().Format(time.RFC3339),
+		RequestedAt:     now.UTC().Format(time.RFC3339),
+		Status:          o.State(),
+		AzureStatus:     o.Status,
 	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+	if o.Done() {
+		r.ExtendedAt = r.RequestedAt
+		r.ExpiresAt = now.Add(dur).UTC().Format(time.RFC3339)
+	}
+	return writeJSON(w, r)
 }

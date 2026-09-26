@@ -8,10 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- JSON output of `activate`, `extend` and `deactivate`: `status` now uses the same values as `azpim requests` (`Active`, `Pending`, …), and a new `azure_status` field carries Azure's raw status. `activate`'s pending value changes from `PendingApproval` to `Pending`. The time fields (`activated_at`, `extended_at`, `deactivated_at`, `expires_at`) are omitted until Azure confirms the change; `requested_at` is always set.
 - With no scope flags, `eligible`, `active`, `requests`, `activate`, `deactivate` and `extend` now list assignments with one tenant-wide query instead of querying every subscription and management group separately. This is faster in large tenants and avoids ARM throttling. Role and scope names now come from the same response, so azpim no longer makes extra lookups for them ([#23](https://github.com/bgs113/azpim/issues/23)).
 - `requests` now lists requests that target you (`asTarget()`) instead of requests you submitted (`asRequestor()`), which Azure rejects at the tenant root. For self-activation the results are the same. Requests an admin made on your behalf now appear too.
 
 ### Fixed
+- `extend` no longer prints `✓ extended` when Azure only queued the request for approval: it says the request is pending and not in effect yet ([#32](https://github.com/bgs113/azpim/issues/32)). `activate` and `deactivate` now check Azure's status the same way. `activate` treated `PendingAdminDecision` and some other pending statuses as success, and `deactivate` never checked the status at all. Denied, failed and timed-out requests are reported as errors.
+- The interactive picker in `extend` said "Select active role to deactivate"; it now says "to extend".
+- `RoleAssignmentDoesNotExist` errors, which Azure returns when you deactivate or extend a role within about 5 minutes of activating it, now explain that and suggest waiting.
+- `PendingRoleAssignmentRequest` errors now say a request for the role is already pending, and point to `azpim requests --pending`.
 - The MEMBERSHIP column (`membership_type` in JSON) now shows Azure's value as-is. Before, anything other than `Group` was shown as `Direct`, so an assignment inherited from a parent scope (`Inherited`) looked like a direct assignment.
 - `active --include-permanent` no longer hides a permanent assignment when you also have a group-based assignment for the same role and scope. Only the shadow Direct copies that Azure creates for group members are hidden now.
 - A subscription or management group that failed to list is no longer dropped silently. There is now a single query, so a failure is reported as an error.

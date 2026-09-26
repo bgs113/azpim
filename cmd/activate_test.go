@@ -181,7 +181,7 @@ func TestPrintActivateJSON(t *testing.T) {
 			"My Sub",
 			dur,
 			now,
-			false,
+			pim.RequestOutcome{Status: "Provisioned"},
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -220,7 +220,7 @@ func TestPrintActivateJSON(t *testing.T) {
 			"My Sub",
 			dur,
 			now,
-			true,
+			pim.RequestOutcome{Status: "PendingAdminDecision"},
 		)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -229,8 +229,29 @@ func TestPrintActivateJSON(t *testing.T) {
 		if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
 			t.Fatalf("unmarshal: %v", err)
 		}
-		if out["status"] != "PendingApproval" {
-			t.Errorf("status = %v, want PendingApproval", out["status"])
+		if out["status"] != "Pending" || out["azure_status"] != "PendingAdminDecision" {
+			t.Errorf("status = %v, azure_status = %v; want Pending, PendingAdminDecision", out["status"], out["azure_status"])
+		}
+		if _, ok := out["expires_at"]; ok {
+			t.Errorf("expires_at = %v; want it omitted while the request is pending", out["expires_at"])
 		}
 	})
+}
+
+func TestOutcomeLine(t *testing.T) {
+	tests := []struct {
+		status string
+		want   string
+	}{
+		{"Provisioned", "✓ done"},
+		{"PendingAdminDecision", `Extension request for "Reader" submitted and pending (Azure status: PendingAdminDecision). It is not in effect yet — see 'azpim requests --pending'.`},
+		{"Accepted", `Extension request for "Reader" submitted, but Azure did not confirm it took effect (status: Accepted). Check 'azpim requests' before relying on it.`},
+		{"", `Extension request for "Reader" submitted, but Azure did not confirm it took effect (status: none). Check 'azpim requests' before relying on it.`},
+	}
+	for _, tt := range tests {
+		got := outcomeLine(pim.RequestOutcome{Status: tt.status}, "Extension", "Reader", "✓ done")
+		if got != tt.want {
+			t.Errorf("outcomeLine(%q) =\n  %s\nwant\n  %s", tt.status, got, tt.want)
+		}
+	}
 }

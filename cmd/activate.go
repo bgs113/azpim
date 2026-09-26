@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -134,13 +133,10 @@ Examples:
 
 		now := time.Now()
 		if activateOutputFormat == "json" {
-			return printActivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.ScopeDisplay, dur, now, outcome.Pending)
+			return printActivateJSON(os.Stdout, selected.RoleName, selected.RoleDefID, selected.Scope, selected.ScopeDisplay, dur, now, outcome)
 		}
-		if outcome.Pending {
-			fmt.Fprintf(os.Stdout, "Activation request submitted for %q — pending admin approval\n", selected.RoleName)
-		} else {
-			fmt.Fprintf(os.Stdout, "✓ Role %q activated for %s at %q\n", selected.RoleName, pim.FormatDuration(dur), selected.ScopeDisplay)
-		}
+		fmt.Fprintln(os.Stdout, outcomeLine(outcome, "Activation", selected.RoleName,
+			fmt.Sprintf("✓ Role %q activated for %s at %q", selected.RoleName, pim.FormatDuration(dur), selected.ScopeDisplay)))
 		return nil
 	},
 }
@@ -256,16 +252,16 @@ type activateResult struct {
 	ScopeDisplay    string `json:"scope_display"`
 	Duration        string `json:"duration"`
 	DurationSeconds int64  `json:"duration_seconds"`
-	ActivatedAt     string `json:"activated_at"`
-	ExpiresAt       string `json:"expires_at"`
+	RequestedAt     string `json:"requested_at"`
+	ActivatedAt     string `json:"activated_at,omitempty"`
+	ExpiresAt       string `json:"expires_at,omitempty"`
 	Status          string `json:"status"`
+	AzureStatus     string `json:"azure_status"`
 }
 
-func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now time.Time, pending bool) error {
-	status := "Active"
-	if pending {
-		status = "PendingApproval"
-	}
+// printActivateJSON writes the result. activated_at and expires_at are only
+// set once Azure confirms the activation took effect.
+func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now time.Time, o pim.RequestOutcome) error {
 	r := activateResult{
 		RoleName:        roleName,
 		RoleDefID:       roleDefID,
@@ -273,11 +269,13 @@ func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay str
 		ScopeDisplay:    scopeDisplay,
 		Duration:        pim.FormatDuration(dur),
 		DurationSeconds: int64(dur.Seconds()),
-		ActivatedAt:     now.UTC().Format(time.RFC3339),
-		ExpiresAt:       now.Add(dur).UTC().Format(time.RFC3339),
-		Status:          status,
+		RequestedAt:     now.UTC().Format(time.RFC3339),
+		Status:          o.State(),
+		AzureStatus:     o.Status,
 	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(r)
+	if o.Done() {
+		r.ActivatedAt = r.RequestedAt
+		r.ExpiresAt = now.Add(dur).UTC().Format(time.RFC3339)
+	}
+	return writeJSON(w, r)
 }

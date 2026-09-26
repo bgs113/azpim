@@ -20,37 +20,68 @@ type ActivateOptions struct {
 	TicketSystem  string
 }
 
-// ActivationOutcome describes the result of a SelfActivate request.
-type ActivationOutcome struct {
-	// Pending is true when the role's policy requires admin approval and the
-	// activation has not yet been granted.
-	Pending bool
+// RequestOutcome is the status Azure reported for a newly submitted schedule
+// request. Azure can accept a request without it taking effect yet (for
+// example while it waits for approval), so callers must check Done before
+// reporting success.
+type RequestOutcome struct {
+	Status string // raw API status, e.g. "Provisioned" or "PendingAdminDecision"; empty if not reported
+}
+
+// State returns the status as `azpim requests` shows it ("Active", "Pending",
+// "Revoked", ...), or the raw status when it has no friendlier name.
+func (o RequestOutcome) State() string {
+	if o.Status == "" {
+		return ""
+	}
+	s := armauthorization.Status(o.Status)
+	return humanizeRequestStatus(&s)
+}
+
+// Done reports whether Azure says the change has already taken effect.
+func (o RequestOutcome) Done() bool { return o.State() == "Active" || o.State() == "Revoked" }
+
+// Pending reports whether the request is waiting on approval or provisioning.
+func (o RequestOutcome) Pending() bool { return o.State() == "Pending" }
+
+// outcomeFromStatus classifies a submitted request's status. Statuses that mean
+// Azure rejected the request (denied, failed, timed out, canceled) are errors.
+func outcomeFromStatus(s *armauthorization.Status) (RequestOutcome, error) {
+	var o RequestOutcome
+	if s != nil {
+		o.Status = string(*s)
+	}
+	switch o.State() {
+	case "Denied", "Failed", "Canceled":
+		return o, fmt.Errorf("request was not accepted (Azure status: %s)", o.Status)
+	}
+	return o, nil
+}
+
+// submit creates a role assignment schedule request and returns the status
+// Azure reported for it. Activate, Deactivate and Extend all go through here
+// so none of them can report success without checking that status.
+func (c *Clients) submit(ctx context.Context, scope string, req armauthorization.RoleAssignmentScheduleRequest) (RequestOutcome, error) {
+	resp, err := c.Requests.Create(ctx, scope, uuid.New().String(), req, nil)
+	if err != nil {
+		return RequestOutcome{}, err
+	}
+	var status *armauthorization.Status
+	if resp.Properties != nil {
+		status = resp.Properties.Status
+	}
+	return outcomeFromStatus(status)
 }
 
 // Activate creates a SelfActivate role assignment schedule request.
-func (c *Clients) Activate(ctx context.Context, opts ActivateOptions) (ActivationOutcome, error) {
-	reqName := uuid.New().String()
+func (c *Clients) Activate(ctx context.Context, opts ActivateOptions) (RequestOutcome, error) {
 	iso := durationToISO8601(opts.Duration)
-
 	req := buildScheduleRequest(armauthorization.RequestTypeSelfActivate, opts.RoleDefID, opts.PrincipalID, &iso, opts.Justification, opts.TicketNumber, opts.TicketSystem)
-
-	resp, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
+	o, err := c.submit(ctx, opts.Scope, req)
 	if err != nil {
-		return ActivationOutcome{}, fmt.Errorf("activate role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
+		return o, fmt.Errorf("activate role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
 	}
-
-	var pending bool
-	if resp.Properties != nil && resp.Properties.Status != nil {
-		switch *resp.Properties.Status {
-		case armauthorization.StatusPendingApproval,
-			armauthorization.StatusPendingApprovalProvisioning,
-			armauthorization.StatusPendingEvaluation,
-			armauthorization.StatusPendingProvisioning,
-			armauthorization.StatusPendingScheduleCreation:
-			pending = true
-		}
-	}
-	return ActivationOutcome{Pending: pending}, nil
+	return o, nil
 }
 
 // DeactivateOptions controls a SelfDeactivate PIM request.
@@ -61,16 +92,13 @@ type DeactivateOptions struct {
 }
 
 // Deactivate creates a SelfDeactivate role assignment schedule request.
-func (c *Clients) Deactivate(ctx context.Context, opts DeactivateOptions) error {
-	reqName := uuid.New().String()
-
+func (c *Clients) Deactivate(ctx context.Context, opts DeactivateOptions) (RequestOutcome, error) {
 	req := buildScheduleRequest(armauthorization.RequestTypeSelfDeactivate, opts.RoleDefID, opts.PrincipalID, nil, "", "", "")
-
-	_, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
+	o, err := c.submit(ctx, opts.Scope, req)
 	if err != nil {
-		return fmt.Errorf("deactivate role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
+		return o, fmt.Errorf("deactivate role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
 	}
-	return nil
+	return o, nil
 }
 
 // ExtendOptions controls a SelfExtend PIM request.
@@ -84,19 +112,17 @@ type ExtendOptions struct {
 	TicketSystem  string
 }
 
-// Extend creates a SelfExtend role assignment schedule request, setting a new
-// duration from the current time on an already-active assignment.
-func (c *Clients) Extend(ctx context.Context, opts ExtendOptions) error {
-	reqName := uuid.New().String()
+// Extend creates a SelfExtend role assignment schedule request, asking for a
+// new duration from the current time on an already-active assignment. Azure
+// usually holds SelfExtend requests for admin approval, so check the outcome.
+func (c *Clients) Extend(ctx context.Context, opts ExtendOptions) (RequestOutcome, error) {
 	iso := durationToISO8601(opts.Duration)
-
 	req := buildScheduleRequest(armauthorization.RequestTypeSelfExtend, opts.RoleDefID, opts.PrincipalID, &iso, opts.Justification, opts.TicketNumber, opts.TicketSystem)
-
-	_, err := c.Requests.Create(ctx, opts.Scope, reqName, req, nil)
+	o, err := c.submit(ctx, opts.Scope, req)
 	if err != nil {
-		return fmt.Errorf("extend role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
+		return o, fmt.Errorf("extend role %q at scope %q: %w", opts.RoleDefID, opts.Scope, err)
 	}
-	return nil
+	return o, nil
 }
 
 // durationToISO8601 converts a Go duration to an ISO 8601 duration string.

@@ -18,6 +18,8 @@ func TestArmCodeDesc(t *testing.T) {
 		{"RoleEligibilityDoesNotExist", 404, "no eligible assignment found at this scope"},
 		{"PendingApproval", 400, "role requires admin approval before it can be activated"},
 		{"PendingAdminDecision", 400, "role requires admin approval before it can be activated"},
+		{"RoleAssignmentDoesNotExist", 400, "no active assignment for this role at this scope — Azure rejects changes for about 5 minutes after activation, so if you just activated it, wait and retry"},
+		{"PendingRoleAssignmentRequest", 400, "a request for this role is already pending — see 'azpim requests --pending'"},
 		{"AuthorizationFailed", 403, "permission denied"},
 		{"InvalidScope", 400, "invalid scope"},
 		{"UnknownCode", 400, "UnknownCode (HTTP 400)"},
