@@ -160,6 +160,12 @@ cosign verify-blob \
 
 The signature bundle is `checksums.txt.sigstore.json` from v1.0.2 on. For v1.0.0 and v1.0.1, use `--bundle checksums.txt.bundle`.
 
+From v1.1.1 on, each release archive also has a [GitHub artifact attestation](https://docs.github.com/en/actions/concepts/security/artifact-attestations) (SLSA build provenance). It shows which workflow run, commit and tag built the file. Verify it with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify azpim-vX.Y.Z-darwin-arm64.zip --repo bgs113/azpim
+```
+
 ```powershell
 # Windows (replace filename with the version you downloaded)
 $file = "azpim-vX.Y.Z-windows-amd64.zip"
@@ -204,15 +210,15 @@ Remove-Item "$HOME\bin\azpim.exe"
 
 ### Container image
 
-> **Image publishing is paused.** Ko, which builds the image, fails with the Go 1.27 toolchain, so releases since v1.0.1 have no image. The newest image, and the one `latest` points to, is **v1.0.0**, which lacks every later change listed in the [CHANGELOG](CHANGELOG.md). Until publishing resumes, use a [release binary](#installation) or `go install`.
+`azpim` is published to the [GitHub Container Registry](https://ghcr.io/bgs113/azpim) as a hardened image built with [Ko](https://ko.build) on a [Chainguard](https://cgr.dev) distroless base (nonroot, near-zero CVEs). The release workflow pushes an image for each release, tagged with its version and `latest`. Each image has an SPDX SBOM attached to its manifest in the registry.
 
-`azpim` is published to the [GitHub Container Registry](https://ghcr.io/bgs113/azpim) as a hardened image built with [Ko](https://ko.build) on a [Chainguard](https://cgr.dev) distroless base (nonroot, near-zero CVEs). When publishing is active, the release workflow pushes an image for each release. Each image has an SPDX SBOM attached to its manifest in the registry.
-
-**Pull the image:**
+**Pull the latest image:**
 
 ```bash
-docker pull ghcr.io/bgs113/azpim:1.0.0
+docker pull ghcr.io/bgs113/azpim:latest
 ```
+
+> Releases v1.0.1 to v1.1.0 have no image: publishing was paused while GoReleaser's bundled ko didn't support Go 1.27.
 
 **Verify the image signature** (requires [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):
 
@@ -220,21 +226,27 @@ docker pull ghcr.io/bgs113/azpim:1.0.0
 cosign verify \
   --certificate-identity-regexp='^https://github\.com/bgs113/azpim/\.github/workflows/release\.yml@' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-  ghcr.io/bgs113/azpim:1.0.0
+  ghcr.io/bgs113/azpim:latest
 ```
 
 Signatures are keyless — the certificate proves the image was built by the Release workflow in this repository and is recorded in [Rekor's](https://rekor.sigstore.dev) public transparency log.
+
+From v1.1.1 on, images also have a GitHub artifact attestation (SLSA build provenance):
+
+```bash
+gh attestation verify oci://ghcr.io/bgs113/azpim:latest --repo bgs113/azpim
+```
 
 **Run using your existing `az login` session** (mounts Azure CLI credentials from the host):
 
 ```bash
 docker run --rm -it \
   -v ~/.azure:/home/nonroot/.azure:ro \
-  ghcr.io/bgs113/azpim:1.0.0 eligible
+  ghcr.io/bgs113/azpim:latest eligible
 
 docker run --rm -it \
   -v ~/.azure:/home/nonroot/.azure:ro \
-  ghcr.io/bgs113/azpim:1.0.0 activate \
+  ghcr.io/bgs113/azpim:latest activate \
     --subscription 00000000-0000-0000-0000-000000000000 \
     --role Contributor --duration 4 --justification "Incident response"
 ```
@@ -246,7 +258,7 @@ docker run --rm -it \
   -e AZURE_TENANT_ID=<tenant-id> \
   -e AZURE_CLIENT_ID=<client-id> \
   -e AZURE_CLIENT_SECRET=<client-secret> \
-  ghcr.io/bgs113/azpim:1.0.0 eligible
+  ghcr.io/bgs113/azpim:latest eligible
 ```
 
 > **Interactive prompts:** Commands that show interactive selection menus (e.g. `azpim activate` without `--role`) require a TTY, which `docker run -it` provides. Fully flag-specified commands work without `-t`.
@@ -292,7 +304,7 @@ git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z   # triggers the release CI workflow
 ```
 
-The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts, per-archive SPDX SBOMs, and `checksums.txt`, signs `checksums.txt` with keyless Cosign, and updates the Homebrew formula. Building and signing the container image is paused (see [Container image](#container-image)).
+The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts, per-archive SPDX SBOMs, and `checksums.txt`, builds and pushes the container image to GHCR via Ko, signs `checksums.txt` and the image with keyless Cosign, records GitHub build provenance attestations for the archives and the image, and updates the Homebrew formula.
 
 ---
 
