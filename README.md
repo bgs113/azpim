@@ -160,6 +160,12 @@ cosign verify-blob \
 
 The signature bundle is `checksums.txt.sigstore.json` from v1.0.2 on. For v1.0.0 and v1.0.1, use `--bundle checksums.txt.bundle`.
 
+From v1.1.1 on, each release archive also has a [GitHub artifact attestation](https://docs.github.com/en/actions/concepts/security/artifact-attestations) (SLSA build provenance). It shows which workflow run, commit and tag built the file. Verify it with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify azpim-vX.Y.Z-darwin-arm64.zip --repo bgs113/azpim
+```
+
 ```powershell
 # Windows (replace filename with the version you downloaded)
 $file = "azpim-vX.Y.Z-windows-amd64.zip"
@@ -224,6 +230,12 @@ cosign verify \
 ```
 
 Signatures are keyless — the certificate proves the image was built by the Release workflow in this repository and is recorded in [Rekor's](https://rekor.sigstore.dev) public transparency log.
+
+From v1.1.1 on, images also have a GitHub artifact attestation (SLSA build provenance):
+
+```bash
+gh attestation verify oci://ghcr.io/bgs113/azpim:latest --repo bgs113/azpim
+```
 
 **Run using your existing `az login` session** (mounts Azure CLI credentials from the host):
 
@@ -292,7 +304,7 @@ git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z   # triggers the release CI workflow
 ```
 
-The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts, per-archive SPDX SBOMs, and `checksums.txt`, builds and pushes the container image to GHCR via Ko, signs `checksums.txt` and the image with keyless Cosign, and updates the Homebrew formula.
+The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts, per-archive SPDX SBOMs, and `checksums.txt`, builds and pushes the container image to GHCR via Ko, signs `checksums.txt` and the image with keyless Cosign, records GitHub build provenance attestations for the archives and the image, and updates the Homebrew formula.
 
 ---
 

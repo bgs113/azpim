@@ -89,5 +89,8 @@ archives:
       - README.md
 
 checksum:
-  name_template: "checksums.txt"
+  name_template: "checksums.txt" # release.yml attests the files listed here
   algorithm: sha256
+
+docker_digest:
+  name_template: "digests.txt" # release.yml attests the images listed here
