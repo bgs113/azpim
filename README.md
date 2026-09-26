@@ -89,10 +89,15 @@ source ~/.bashrc
 
 ### Windows
 
-Download `azpim-vX.Y.Z-windows-amd64.zip` from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest).
+Download the ZIP for your architecture from [GitHub Releases](https://github.com/bgs113/azpim/releases/latest):
+
+| Architecture | File                             |
+| ------------ | -------------------------------- |
+| x86-64       | `azpim-vX.Y.Z-windows-amd64.zip` |
+| ARM64        | `azpim-vX.Y.Z-windows-arm64.zip` |
 
 Extract the ZIP — in File Explorer: right-click → **Extract All**, or in PowerShell
-(replace `X.Y.Z` with the version you downloaded):
+(replace `X.Y.Z` with the version you downloaded, and `amd64` with `arm64` on ARM):
 
 ```powershell
 Expand-Archive -Path azpim-vX.Y.Z-windows-amd64.zip -DestinationPath .
@@ -147,11 +152,13 @@ To also verify the signature on `checksums.txt` itself (requires [Cosign](https:
 
 ```bash
 cosign verify-blob \
-  --certificate-identity-regexp='https://github.com/bgs113/azpim/.github/workflows/release.yml' \
+  --certificate-identity-regexp='^https://github\.com/bgs113/azpim/\.github/workflows/release\.yml@' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-  --bundle checksums.txt.bundle \
+  --bundle checksums.txt.sigstore.json \
   checksums.txt
 ```
+
+The signature bundle is `checksums.txt.sigstore.json` from v1.0.2 on. For v1.0.0 and v1.0.1, use `--bundle checksums.txt.bundle`.
 
 ```powershell
 # Windows (replace filename with the version you downloaded)
@@ -197,21 +204,23 @@ Remove-Item "$HOME\bin\azpim.exe"
 
 ### Container image
 
-`azpim` is published to the [GitHub Container Registry](https://ghcr.io/bgs113/azpim) as a hardened image built with [Ko](https://ko.build) on a [Chainguard](https://cgr.dev) distroless base (nonroot, near-zero CVEs). A new image is pushed automatically on every release. Each image has an SPDX SBOM attached to its manifest in the registry.
+> **Image publishing is paused.** Ko, which builds the image, fails with the Go 1.27 toolchain, so releases since v1.0.1 have no image. The newest image, and the one `latest` points to, is **v1.0.0**, which lacks every later change listed in the [CHANGELOG](CHANGELOG.md). Until publishing resumes, use a [release binary](#installation) or `go install`.
 
-**Pull the latest image:**
+`azpim` is published to the [GitHub Container Registry](https://ghcr.io/bgs113/azpim) as a hardened image built with [Ko](https://ko.build) on a [Chainguard](https://cgr.dev) distroless base (nonroot, near-zero CVEs). When publishing is active, the release workflow pushes an image for each release. Each image has an SPDX SBOM attached to its manifest in the registry.
+
+**Pull the image:**
 
 ```bash
-docker pull ghcr.io/bgs113/azpim:latest
+docker pull ghcr.io/bgs113/azpim:1.0.0
 ```
 
 **Verify the image signature** (requires [Cosign](https://docs.sigstore.dev/cosign/system_config/installation/)):
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp='https://github.com/bgs113/azpim/.github/workflows/release.yml' \
+  --certificate-identity-regexp='^https://github\.com/bgs113/azpim/\.github/workflows/release\.yml@' \
   --certificate-oidc-issuer='https://token.actions.githubusercontent.com' \
-  ghcr.io/bgs113/azpim:latest
+  ghcr.io/bgs113/azpim:1.0.0
 ```
 
 Signatures are keyless — the certificate proves the image was built by the Release workflow in this repository and is recorded in [Rekor's](https://rekor.sigstore.dev) public transparency log.
@@ -221,11 +230,11 @@ Signatures are keyless — the certificate proves the image was built by the Rel
 ```bash
 docker run --rm -it \
   -v ~/.azure:/home/nonroot/.azure:ro \
-  ghcr.io/bgs113/azpim:latest eligible
+  ghcr.io/bgs113/azpim:1.0.0 eligible
 
 docker run --rm -it \
   -v ~/.azure:/home/nonroot/.azure:ro \
-  ghcr.io/bgs113/azpim:latest activate \
+  ghcr.io/bgs113/azpim:1.0.0 activate \
     --subscription 00000000-0000-0000-0000-000000000000 \
     --role Contributor --duration 4 --justification "Incident response"
 ```
@@ -237,7 +246,7 @@ docker run --rm -it \
   -e AZURE_TENANT_ID=<tenant-id> \
   -e AZURE_CLIENT_ID=<client-id> \
   -e AZURE_CLIENT_SECRET=<client-secret> \
-  ghcr.io/bgs113/azpim:latest eligible
+  ghcr.io/bgs113/azpim:1.0.0 eligible
 ```
 
 > **Interactive prompts:** Commands that show interactive selection menus (e.g. `azpim activate` without `--role`) require a TTY, which `docker run -it` provides. Fully flag-specified commands work without `-t`.
@@ -283,7 +292,7 @@ git tag -a vX.Y.Z -m "vX.Y.Z"
 git push origin vX.Y.Z   # triggers the release CI workflow
 ```
 
-The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts, per-archive SPDX SBOMs, and `checksums.txt`, builds and pushes the container image to GHCR via Ko, and signs the image with keyless Cosign.
+The CI workflow cross-compiles for all platforms, creates the GitHub Release with ZIP artifacts, per-archive SPDX SBOMs, and `checksums.txt`, signs `checksums.txt` with keyless Cosign, and updates the Homebrew formula. Building and signing the container image is paused (see [Container image](#container-image)).
 
 ---
 
@@ -555,11 +564,6 @@ azpim deactivate --all
 
 # Export active roles as JSON
 azpim active --output json | jq '.[].role_name'
-
-# Same workflows via Docker (published image)
-docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:latest eligible
-docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:latest active --human
-docker run --rm -it -v ~/.azure:/home/nonroot/.azure:ro ghcr.io/bgs113/azpim:latest active --output json
 ```
 
 ## Contributing
