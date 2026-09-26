@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Homebrew: azpim is now published as a Cask (`Casks/azpim.rb` in `bgs113/homebrew-tap`) instead of a Formula, because GoReleaser deprecated Formula generation. `brew install bgs113/tap/azpim` and `brew upgrade azpim` keep working. The Cask clears macOS's quarantine flag on install, so Gatekeeper no longer blocks the binary.
+
 ## [1.1.0] - 2026-09-25
 
 ### Added

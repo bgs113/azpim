@@ -55,7 +55,11 @@ docker_signs:
       - --yes
       - ${artifact}
 
-brews:
+# A Cask replaces the deprecated `brews` Formula (https://goreleaser.com/deprecations#brews).
+# It is written to Casks/azpim.rb in the tap; the old Formula (azpim.rb at the
+# tap root) is removed once this has shipped, with tap_migrations.json moving
+# existing installs over.
+homebrew_casks:
   - name: azpim
     repository:
       owner: bgs113
@@ -64,10 +68,13 @@ brews:
     homepage: https://github.com/bgs113/azpim
     description: "CLI for managing Azure Privileged Identity Management (PIM) role assignments"
     skip_upload: auto
-    install: |
-      bin.install "azpim"
-    test: |
-      system "#{bin}/azpim", "version"
+    hooks:
+      post:
+        # The binary isn't notarized, so clear the quarantine flag or Gatekeeper blocks it.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/azpim"]
+          end
 
 sboms:
   - artifacts: archive
