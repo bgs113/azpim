@@ -55,7 +55,11 @@ Examples:
 			return err
 		}
 
-		active, err := clients.ListActive(ctx, scope, false)
+		var active []pim.ActiveAssignment
+		err = listAt(ctx, clients, extendScope, scope, func(scope string) (err error) {
+			active, err = clients.ListActive(ctx, scope, false)
+			return err
+		})
 		if err != nil {
 			return fmt.Errorf("fetch active assignments: %w", err)
 		}

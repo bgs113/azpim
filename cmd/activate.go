@@ -75,7 +75,7 @@ Examples:
 			eligible []pim.EligibleAssignment
 			active   []pim.ActiveAssignment
 		)
-		{
+		err = listAt(ctx, clients, activateScope, scope, func(scope string) error {
 			g, gctx := errgroup.WithContext(ctx)
 			g.Go(func() error {
 				var err error
@@ -93,9 +93,10 @@ Examples:
 				}
 				return nil
 			})
-			if err := g.Wait(); err != nil {
-				return err
-			}
+			return g.Wait()
+		})
+		if err != nil {
+			return err
 		}
 		eligible = pim.FilterEligibleActive(eligible, active)
 
