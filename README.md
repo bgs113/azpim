@@ -302,6 +302,19 @@ azd auth login
 
 > **Note:** Azure PowerShell (`Connect-AzAccount`) is not supported — it is not included in the Go SDK's `DefaultAzureCredential` chain.
 
+### Sovereign clouds
+
+`azpim` uses Azure public cloud by default. For Azure US Government or Azure China, pass `--cloud usgov` or `--cloud china`, or set `AZURE_CLOUD`. The Azure CLI names (`AzureUSGovernment`, `AzureChinaCloud`) work too.
+
+The Azure CLI must be signed in to the same cloud:
+
+```bash
+az cloud set --name AzureUSGovernment
+az login
+azpim eligible --cloud usgov
+# or: export AZURE_CLOUD=usgov
+```
+
 ---
 
 ## Usage

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bgs113/azpim/internal/auth"
 	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/manifoldco/promptui"
@@ -40,16 +39,12 @@ Examples:
   azpim activate                                                              # interactive, all scopes
   azpim activate --subscription <id> --role "Contributor" --duration 2h --justification "incident response"`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cred, err := auth.NewCredential()
+		cred, clients, err := connect()
 		if err != nil {
 			return err
 		}
 
 		ctx := cmd.Context()
-		clients, err := pim.NewClients(cred)
-		if err != nil {
-			return err
-		}
 		principalID, err := resolvePrincipal(ctx, cred)
 		if err != nil {
 			return err

@@ -20,7 +20,7 @@ func (f *fakeCred) GetToken(_ context.Context, _ policy.TokenRequestOptions) (az
 }
 
 func TestResolveTokenClaim(t *testing.T) {
-	cred := &fakeCred{claims: map[string]string{"oid": "abc123", "tid": "tenant1"}}
+	cred := &Credential{TokenCredential: &fakeCred{claims: map[string]string{"oid": "abc123", "tid": "tenant1"}}}
 	ctx := context.Background()
 
 	if got, err := ResolveTokenClaim(ctx, cred, "oid"); err != nil || got != "abc123" {
@@ -49,5 +49,31 @@ func TestIdentityLabel(t *testing.T) {
 		if got := identityLabel(c.claims); got != c.want {
 			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
 		}
+	}
+}
+
+func TestParseCloud(t *testing.T) {
+	cases := []struct {
+		name, wantScope string
+	}{
+		{"public", "https://management.core.windows.net//.default"},
+		{"AzureCloud", "https://management.core.windows.net//.default"},
+		{"usgov", "https://management.core.usgovcloudapi.net//.default"},
+		{"AzureUSGovernment", "https://management.core.usgovcloudapi.net//.default"},
+		{"china", "https://management.core.chinacloudapi.cn//.default"},
+		{"AzureChinaCloud", "https://management.core.chinacloudapi.cn//.default"},
+	}
+	for _, c := range cases {
+		cfg, err := ParseCloud(c.name)
+		if err != nil {
+			t.Errorf("%s: %v", c.name, err)
+			continue
+		}
+		if got := armScope(cfg); got != c.wantScope {
+			t.Errorf("%s: scope %q, want %q", c.name, got, c.wantScope)
+		}
+	}
+	if _, err := ParseCloud("mars"); err == nil {
+		t.Error("expected error for unknown cloud")
 	}
 }

@@ -8,25 +8,64 @@ import (
 	"strings"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	_ "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/runtime" // registers each cloud's Resource Manager audience
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/cloud"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 )
 
-// NewCredential returns a DefaultAzureCredential that picks up az login,
-// environment variables (AZURE_CLIENT_ID / SECRET / TENANT_ID), workload
-// identity, and other standard Azure auth sources automatically.
-func NewCredential() (azcore.TokenCredential, error) {
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
+// Credential is a token credential for one Azure cloud.
+type Credential struct {
+	azcore.TokenCredential
+	Cloud cloud.Configuration
+}
+
+// clouds maps --cloud values, plus the names 'az cloud list' uses, to their
+// configurations. Keys are lowercase.
+var clouds = map[string]cloud.Configuration{
+	"public":            cloud.AzurePublic,
+	"azurecloud":        cloud.AzurePublic,
+	"usgov":             cloud.AzureGovernment,
+	"azureusgovernment": cloud.AzureGovernment,
+	"china":             cloud.AzureChina,
+	"azurechinacloud":   cloud.AzureChina,
+}
+
+// ParseCloud returns the configuration for a --cloud value (case-insensitive).
+func ParseCloud(name string) (cloud.Configuration, error) {
+	c, ok := clouds[strings.ToLower(name)]
+	if !ok {
+		return cloud.Configuration{}, fmt.Errorf("unknown cloud %q: use public, usgov or china", name)
+	}
+	return c, nil
+}
+
+// NewCredential returns a DefaultAzureCredential for the named cloud that
+// picks up az login, environment variables (AZURE_CLIENT_ID / SECRET /
+// TENANT_ID), workload identity, and other standard Azure auth sources.
+func NewCredential(cloudName string) (*Credential, error) {
+	c, err := ParseCloud(cloudName)
+	if err != nil {
+		return nil, err
+	}
+	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
+		ClientOptions: azcore.ClientOptions{Cloud: c},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Azure credential: %w\n\nTip: run 'az login' or 'azd auth login' first", err)
 	}
-	return cred, nil
+	return &Credential{TokenCredential: cred, Cloud: c}, nil
+}
+
+// armScope is the token scope for the cloud's Resource Manager endpoint.
+func armScope(c cloud.Configuration) string {
+	return c.Services[cloud.ResourceManager].Audience + "/.default"
 }
 
 // tokenClaims fetches an ARM access token and decodes its JWT payload.
-func tokenClaims(ctx context.Context, cred azcore.TokenCredential) (map[string]any, error) {
+func tokenClaims(ctx context.Context, cred *Credential) (map[string]any, error) {
 	token, err := cred.GetToken(ctx, policy.TokenRequestOptions{
-		Scopes: []string{"https://management.azure.com/.default"},
+		Scopes: []string{armScope(cred.Cloud)},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get token: %w", err)
@@ -51,7 +90,7 @@ func tokenClaims(ctx context.Context, cred azcore.TokenCredential) (map[string]a
 
 // ResolveTokenClaim fetches an ARM access token and extracts a named JWT claim
 // from the payload. Common claims: "oid" (principal object ID), "tid" (tenant ID).
-func ResolveTokenClaim(ctx context.Context, cred azcore.TokenCredential, claim string) (string, error) {
+func ResolveTokenClaim(ctx context.Context, cred *Credential, claim string) (string, error) {
 	claims, err := tokenClaims(ctx, cred)
 	if err != nil {
 		return "", err
@@ -65,7 +104,7 @@ func ResolveTokenClaim(ctx context.Context, cred azcore.TokenCredential, claim s
 
 // ResolveIdentity describes who the credential acts as, e.g.
 // "alice@contoso.com (tenant <tid>)" or "service principal <appid> (tenant <tid>)".
-func ResolveIdentity(ctx context.Context, cred azcore.TokenCredential) (string, error) {
+func ResolveIdentity(ctx context.Context, cred *Credential) (string, error) {
 	claims, err := tokenClaims(ctx, cred)
 	if err != nil {
 		return "", err
@@ -94,11 +133,11 @@ func identityLabel(claims map[string]any) string {
 }
 
 // ResolveTenantID extracts the tenant ID from the active credential's token.
-func ResolveTenantID(ctx context.Context, cred azcore.TokenCredential) (string, error) {
+func ResolveTenantID(ctx context.Context, cred *Credential) (string, error) {
 	return ResolveTokenClaim(ctx, cred, "tid")
 }
 
 // ResolvePrincipalID extracts the user/service-principal object ID from the token.
-func ResolvePrincipalID(ctx context.Context, cred azcore.TokenCredential) (string, error) {
+func ResolvePrincipalID(ctx context.Context, cred *Credential) (string, error) {
 	return ResolveTokenClaim(ctx, cred, "oid")
 }
