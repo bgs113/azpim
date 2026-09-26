@@ -1,3 +1,7 @@
+// Package pim wraps the Azure authorization API for PIM: listing eligible and
+// active role assignments and requests, activating, extending and
+// deactivating roles, and reading the activation limits in role management
+// policies.
 package pim
 
 import (

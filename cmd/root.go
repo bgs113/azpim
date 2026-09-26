@@ -1,3 +1,6 @@
+// Package cmd implements azpim's Cobra commands: the scope, output and
+// request flags they share, interactive prompts for missing values, and
+// friendlier messages for Azure API errors.
 package cmd
 
 import (

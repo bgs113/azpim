@@ -25,8 +25,7 @@ linters:
       rules:
         - name: exported
           disabled: true       # CLI tool, not a library
-        - name: package-comments
-          disabled: true       # internal packages, not a library
+        - name: package-comments # godoc/pkg.go.dev summaries (#35)
         - name: unused-parameter
           disabled: true       # cobra RunE signature requires args []string
 
