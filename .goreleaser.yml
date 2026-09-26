@@ -55,6 +55,11 @@ docker_signs:
       - --yes
       - ${artifact}
 
+# Deliberately a Formula, not a Cask, despite GoReleaser's `brews` deprecation
+# warning. Casks re-apply macOS's quarantine attribute, so Gatekeeper blocks the
+# un-notarized binary (PR #7, CHANGELOG 1.0.1), and Homebrew 5.0 removed the
+# --no-quarantine escape hatch. When GoReleaser removes `brews`, replace it with
+# a source-built Formula in the tap, not a Cask.
 brews:
   - name: azpim
     repository:
