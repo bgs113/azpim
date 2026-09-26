@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Container images are published to GHCR again (`ghcr.io/bgs113/azpim`), starting with this release, and `latest` moves off v1.0.0. Publishing was paused from v1.0.1 to v1.1.0 because GoReleaser's bundled ko didn't support Go 1.27; GoReleaser v2.18.0 fixed it.
+
 ## [1.1.0] - 2026-09-26
 
 ### Added
