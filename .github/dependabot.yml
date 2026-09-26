@@ -6,6 +6,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7 # let a new release age a week before proposing it; security updates are not delayed
     groups:
       go-dependencies:
         update-types:
@@ -15,6 +17,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown:
+      default-days: 7 # let a new release age a week before proposing it; security updates are not delayed
     groups:
       github-actions:
         patterns:
