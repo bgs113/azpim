@@ -372,7 +372,7 @@ The scope flags don't read environment variables, so a subscription left in `AZU
 | Flag                       | Description                                                                                                    |
 | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `-o, --output table\|json` | Output format (default: `table`). On every command that lists or changes assignments                         |
-| `--human`                  | Human-readable TIME REMAINING in `azpim active` (`1h 32m 5s` instead of `01:32:05`). `eligible` and `requests` accept it but show no durations |
+| `--human`                  | Human-readable TIME REMAINING (`1h 32m 5s` instead of `01:32:05`). `azpim active` only                        |
 
 ---
 

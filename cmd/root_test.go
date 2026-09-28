@@ -144,3 +144,28 @@ func TestAlignColumns(t *testing.T) {
 		t.Errorf("alignColumns =\n%q\nwant\n%q", got, want)
 	}
 }
+
+func TestCommandsRejectPositionalArgs(t *testing.T) {
+	for _, c := range rootCmd.Commands() {
+		if c.Name() == "help" || c.Name() == "completion" {
+			continue
+		}
+		t.Run(c.Name(), func(t *testing.T) {
+			if err := c.Args(c, []string{"extra"}); err == nil {
+				t.Errorf("%s accepted an unexpected argument", c.Name())
+			}
+			if err := c.Args(c, nil); err != nil {
+				t.Errorf("%s rejected no arguments: %v", c.Name(), err)
+			}
+		})
+	}
+}
+
+func TestHumanFlagOnlyOnActive(t *testing.T) {
+	for _, c := range rootCmd.Commands() {
+		has := c.Flags().Lookup("human") != nil
+		if want := c == activeCmd; has != want {
+			t.Errorf("%s: --human registered = %v, want %v", c.Name(), has, want)
+		}
+	}
+}

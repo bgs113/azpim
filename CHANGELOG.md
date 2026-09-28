@@ -17,7 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `deactivate --all` asks for confirmation with the same prompts. Without a terminal it now fails with `--yes is required when not running in a terminal` instead of silently deactivating nothing.
 - When stdin isn't a terminal, azpim no longer tries to prompt. It exits with an error naming the missing flag, e.g. `--role is required when not running in a terminal`.
 
+### Removed
+- `--human` on `eligible` and `requests`, where it never did anything (neither has a time-remaining column). It still works on `active`. Scripts that pass it to those commands now get `unknown flag: --human`.
+
 ### Fixed
+- Commands now reject unexpected arguments instead of silently ignoring them. For example, `azpim activate Owner` used to ignore `Owner` and open the role picker; it now fails with `unknown command "Owner"` (use `--role Owner`).
 - Table colors now respect `NO_COLOR` and are only used when the output itself is a terminal.
 
 ## [1.1.2] - 2026-09-26

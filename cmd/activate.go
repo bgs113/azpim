@@ -30,6 +30,7 @@ var (
 
 var activateCmd = &cobra.Command{
 	Use:   "activate",
+	Args:  cobra.NoArgs,
 	Short: "Activate an eligible PIM role assignment",
 	Long: `Activate an eligible PIM role assignment for the current principal.
 
