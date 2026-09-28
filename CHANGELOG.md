@@ -7,20 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-28
+
 ### Added
-- Every command's `--help` now ends with links to the documentation and the issue tracker.
-- A spinner on stderr while azpim signs in, fetches assignments or reads a role's policy, shown only when stdin and stderr are terminals (not with `ACCESSIBLE=1` or `TERM=dumb`). Ctrl-C while it spins exits with status 130.
-- Requests that only read from Azure time out: each attempt after 30 seconds, retried up to 3 times, so one Azure never answers fails after about two minutes with `Azure didn't respond …` instead of hanging. Activating, extending and deactivating are exempt, so a slow request is never resent as a duplicate.
 - When you answered any prompts, `activate`, `extend` and `deactivate` ask you to confirm the request before sending it. Runs driven entirely by flags, `--dry-run` and `--validate-only` don't ask.
 - `ACCESSIBLE=1` switches to plain line-based prompts: a numbered list to pick from and typed answers, for screen readers or if you prefer them to the interactive UI.
+- A spinner on stderr while azpim signs in, fetches assignments or reads a role's policy, shown only when stdin and stderr are terminals (not with `ACCESSIBLE=1` or `TERM=dumb`). Ctrl-C while it spins exits with status 130.
+- Requests that only read from Azure time out: each attempt after 30 seconds, retried up to 3 times, so one Azure never answers fails after about two minutes with `Azure didn't respond …` instead of hanging. Activating, extending and deactivating are exempt, so a slow request is never resent as a duplicate.
+- Every command's `--help` now ends with links to the documentation and the issue tracker.
 
 ### Changed
+- Interactive prompts now use [huh](https://github.com/charmbracelet/huh) v2 instead of the unmaintained promptui. Press `/` to filter the role picker. Ctrl-C cancels quietly, exiting with status 130 instead of printing `Error: selection cancelled`. Prompts draw on stderr, so `-o json` output stays clean. Each answer stays on screen after you press Enter, and picker columns line up however long the role names are.
+- When stdin isn't a terminal, azpim no longer tries to prompt. It exits with an error naming the missing flag, e.g. `--role is required when not running in a terminal`.
+- `deactivate --all` asks for confirmation with the same prompts. Without a terminal it now fails with `--yes is required when not running in a terminal` instead of silently deactivating nothing.
+- Tables from `eligible`, `active` and `requests` are drawn with [Lip Gloss](https://github.com/charmbracelet/lipgloss) v2 instead of tablewriter. They look the same, and tablewriter and eight modules only it used are gone. In a terminal too narrow for a table, long cells now wrap within their column, at word boundaries, instead of the terminal breaking whole lines; piped output still has one row per line.
 - When `eligible`, `active` or `requests` find nothing, the table output now writes nothing to stdout and prints the message (`No active assignments found.` and so on) on stderr; the exit status is still 0 and `-o json` still prints `[]`. Scripts that matched that message on stdout should check for empty output instead.
 - `azpim --version` and `azpim version` now print the same line, `azpim 1.2.0`: the program name, then the version without a `v` (it was `azpim version v1.2.0` and `v1.2.0`). The version is everything after the last space, per the GNU `--version` convention.
-- Tables from `eligible`, `active` and `requests` are drawn with [Lip Gloss](https://github.com/charmbracelet/lipgloss) v2 instead of tablewriter. They look the same, and tablewriter and eight modules only it used are gone. In a terminal too narrow for a table, long cells now wrap within their column, at word boundaries, instead of the terminal breaking whole lines; piped output still has one row per line.
-- Interactive prompts now use [huh](https://github.com/charmbracelet/huh) v2 instead of the unmaintained promptui. Press `/` to filter the role picker. Ctrl-C cancels quietly, exiting with status 130 instead of printing `Error: selection cancelled`. Prompts draw on stderr, so `-o json` output stays clean. Each answer stays on screen after you press Enter, and picker columns line up however long the role names are.
-- `deactivate --all` asks for confirmation with the same prompts. Without a terminal it now fails with `--yes is required when not running in a terminal` instead of silently deactivating nothing.
-- When stdin isn't a terminal, azpim no longer tries to prompt. It exits with an error naming the missing flag, e.g. `--role is required when not running in a terminal`.
 
 ### Removed
 - `--human` on `eligible` and `requests`, where it never did anything (neither has a time-remaining column). It still works on `active`. Scripts that pass it to those commands now get `unknown flag: --human`.
@@ -114,7 +116,8 @@ First public release.
 - Sign release binaries and container images with Cosign; publish SBOMs.
 - Add MIT license.
 
-[Unreleased]: https://github.com/bgs113/azpim/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/bgs113/azpim/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/bgs113/azpim/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bgs113/azpim/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bgs113/azpim/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bgs113/azpim/compare/v1.0.2...v1.1.0
