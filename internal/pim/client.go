@@ -21,7 +21,11 @@ import (
 type Clients struct {
 	EligibleInstances *armauthorization.RoleEligibilityScheduleInstancesClient
 	ActiveInstances   *armauthorization.RoleAssignmentScheduleInstancesClient
-	Requests          *armauthorization.RoleAssignmentScheduleRequestsClient
+	Requests          *armauthorization.RoleAssignmentScheduleRequestsClient // lists and validates requests
+	// Creator creates requests (activate, extend, deactivate). Unlike the other
+	// clients it has no per-attempt timeout: the SDK resends a timed-out attempt,
+	// and if the first had gone through, the resend fails as "already exists".
+	Creator           *armauthorization.RoleAssignmentScheduleRequestsClient
 	PolicyAssignments *armauthorization.RoleManagementPolicyAssignmentsClient
 	Policies          *armauthorization.RoleManagementPoliciesClient
 	Subscriptions     *armsubscriptions.Client
@@ -32,9 +36,9 @@ type Clients struct {
 	policyCache map[string]time.Duration
 }
 
-// TryTimeout caps each attempt of an Azure request. The SDK retries a timed-out
-// attempt 3 times, so a request Azure never answers fails after about two
-// minutes instead of hanging.
+// TryTimeout caps each attempt of an Azure request that only reads. The SDK
+// retries a timed-out attempt 3 times, so a read Azure never answers fails after
+// about two minutes instead of hanging. Creating requests is exempt; see Creator.
 const TryTimeout = 30 * time.Second
 
 // clientOptions returns the ARM client options for the given cloud.
@@ -68,6 +72,13 @@ func newClients(cred azcore.TokenCredential, opts arm.ClientOptions) (*Clients, 
 		return nil, fmt.Errorf("create schedule requests client: %w", err)
 	}
 
+	createOpts := opts
+	createOpts.Retry.TryTimeout = 0
+	creator, err := armauthorization.NewRoleAssignmentScheduleRequestsClient(cred, &createOpts)
+	if err != nil {
+		return nil, fmt.Errorf("create schedule requests client: %w", err)
+	}
+
 	policyAssignments, err := armauthorization.NewRoleManagementPolicyAssignmentsClient(cred, &opts)
 	if err != nil {
 		return nil, fmt.Errorf("create policy assignments client: %w", err)
@@ -87,6 +98,7 @@ func newClients(cred azcore.TokenCredential, opts arm.ClientOptions) (*Clients, 
 		EligibleInstances: eligible,
 		ActiveInstances:   active,
 		Requests:          requests,
+		Creator:           creator,
 		PolicyAssignments: policyAssignments,
 		Policies:          policies,
 		Subscriptions:     subscriptions,

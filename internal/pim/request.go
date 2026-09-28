@@ -103,7 +103,7 @@ func (c *Clients) submit(ctx context.Context, scope string, req armauthorization
 		o.Check = "Validated"
 		return o, err
 	}
-	resp, err := c.Requests.Create(ctx, scope, uuid.New().String(), req, nil)
+	resp, err := c.Creator.Create(ctx, scope, uuid.New().String(), req, nil)
 	if err != nil {
 		return RequestOutcome{}, err
 	}

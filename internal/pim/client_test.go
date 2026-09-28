@@ -98,3 +98,38 @@ func TestStalledRequestTimesOut(t *testing.T) {
 		t.Errorf("tried %d times, want 4 (the first attempt plus the SDK's 3 retries)", st.tries)
 	}
 }
+
+// Creating a request has no per-attempt timeout, so a slow create is never
+// resent (a resend fails as "already exists" if the first went through).
+// Validating one only reads, so it keeps the timeout and its retries.
+func TestCreateHasNoPerAttemptTimeout(t *testing.T) {
+	for _, tt := range []struct {
+		mode      Mode
+		wantTries int
+	}{
+		{Submit, 1},
+		{ValidateOnly, 4},
+	} {
+		st := &stall{}
+		opts := clientOptions(cloud.AzurePublic)
+		opts.Transport = st
+		opts.Retry.TryTimeout = 20 * time.Millisecond
+		opts.Retry.RetryDelay = time.Millisecond
+		opts.Retry.MaxRetryDelay = time.Millisecond
+		clients, err := newClients(fakeToken{}, opts)
+		if err != nil {
+			t.Fatal(err)
+		}
+		clients.Mode = tt.mode
+
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		_, err = clients.Activate(ctx, ActivateOptions{Scope: "/subscriptions/s", Duration: time.Hour})
+		cancel()
+		if err == nil {
+			t.Fatalf("mode %d: want an error from the stalled transport", tt.mode)
+		}
+		if st.tries != tt.wantTries {
+			t.Errorf("mode %d: %d attempts, want %d", tt.mode, st.tries, tt.wantTries)
+		}
+	}
+}
