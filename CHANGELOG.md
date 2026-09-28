@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- A spinner on stderr while azpim signs in, fetches assignments or reads a role's policy, shown only when stdin and stderr are terminals (not with `ACCESSIBLE=1` or `TERM=dumb`). Ctrl-C while it spins exits with status 130.
+- Requests that only read from Azure time out: each attempt after 30 seconds, retried up to 3 times, so one Azure never answers fails after about two minutes with `Azure didn't respond …` instead of hanging. Activating, extending and deactivating are exempt, so a slow request is never resent as a duplicate.
 - When you answered any prompts, `activate`, `extend` and `deactivate` ask you to confirm the request before sending it. Runs driven entirely by flags, `--dry-run` and `--validate-only` don't ask.
 - `ACCESSIBLE=1` switches to plain line-based prompts: a numbered list to pick from and typed answers, for screen readers or if you prefer them to the interactive UI.
 

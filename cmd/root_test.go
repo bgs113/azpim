@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 )
@@ -52,6 +55,14 @@ func TestFriendlyError(t *testing.T) {
 		want := "Azure authentication failed — run 'az login' to sign in"
 		if got != want {
 			t.Errorf("got %q, want %q", got, want)
+		}
+	})
+
+	t.Run("timeout", func(t *testing.T) {
+		err := fmt.Errorf("list eligible assignments at scope \"/\": %w", context.DeadlineExceeded)
+		got := friendlyError(err)
+		if !strings.HasPrefix(got, "Azure didn't respond") || !strings.Contains(got, pim.TryTimeout.String()) {
+			t.Errorf("got %q, want the timeout message naming %s", got, pim.TryTimeout)
 		}
 	})
 
@@ -167,5 +178,24 @@ func TestHumanFlagOnlyOnActive(t *testing.T) {
 		if want := c == activeCmd; has != want {
 			t.Errorf("%s: --human registered = %v, want %v", c.Name(), has, want)
 		}
+	}
+}
+
+// Without a terminal, spin just runs fn and passes its error through, drawing
+// nothing (so piped and CI output stay clean).
+func TestSpinWithoutTerminalRunsFn(t *testing.T) {
+	origIn, origErr := stdinIsTerminal, stderrIsTerminal
+	t.Cleanup(func() { stdinIsTerminal, stderrIsTerminal = origIn, origErr })
+	stdinIsTerminal = func() bool { return true }
+	stderrIsTerminal = func() bool { return false }
+
+	boom := errors.New("boom")
+	ran := false
+	err := spin(context.Background(), "Working…", func(context.Context) error {
+		ran = true
+		return boom
+	})
+	if !ran || !errors.Is(err, boom) {
+		t.Errorf("ran=%v err=%v, want fn run and its error returned", ran, err)
 	}
 }

@@ -374,6 +374,12 @@ The scope flags don't read environment variables, so a subscription left in `AZU
 | `-o, --output table\|json` | Output format (default: `table`). On every command that lists or changes assignments                         |
 | `--human`                  | Human-readable TIME REMAINING (`1h 32m 5s` instead of `01:32:05`). `azpim active` only                        |
 
+### Progress and timeouts
+
+While azpim signs in, fetches assignments or reads a role's policy, a spinner shows on stderr. It appears only when stdin and stderr are both terminals, so piped, redirected and CI output never contains it. It's also off with `ACCESSIBLE=1` and on `TERM=dumb`. Ctrl-C while it spins cancels the command with status 130.
+
+Requests that only read from Azure (listing assignments and requests, reading role policies, looking up scopes, signing in) time out after 30 seconds per attempt and are retried up to 3 times, so one Azure never answers fails after about two minutes with `Azure didn't respond …` instead of hanging. Signing in through `az login` has its own 10-second limit. Requests that activate, extend or deactivate a role have no per-attempt timeout: resending one that had already gone through would fail as a duplicate. The spinner shows they're still working, and Ctrl-C cancels.
+
 ---
 
 ### `azpim eligible` — List eligible assignments

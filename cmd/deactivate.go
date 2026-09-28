@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -47,16 +48,17 @@ Examples:
 			return err
 		}
 
-		scope, err := queryScope(ctx, clients, cred, deactivateScope)
-		if err != nil {
-			return err
-		}
-
 		// Only time-bound (Activated) assignments can be deactivated.
 		var active []pim.ActiveAssignment
-		err = listAt(ctx, clients, deactivateScope, scope, func(scope string) (err error) {
-			active, err = clients.ListActive(ctx, scope, false)
-			return err
+		err = spin(ctx, "Fetching active assignments…", func(ctx context.Context) error {
+			scope, err := queryScope(ctx, clients, cred, deactivateScope)
+			if err != nil {
+				return err
+			}
+			return listAt(ctx, clients, deactivateScope, scope, func(scope string) (err error) {
+				active, err = clients.ListActive(ctx, scope, false)
+				return err
+			})
 		})
 		if err != nil {
 			return fmt.Errorf("fetch active assignments: %w", err)

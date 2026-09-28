@@ -21,7 +21,11 @@ import (
 type Clients struct {
 	EligibleInstances *armauthorization.RoleEligibilityScheduleInstancesClient
 	ActiveInstances   *armauthorization.RoleAssignmentScheduleInstancesClient
-	Requests          *armauthorization.RoleAssignmentScheduleRequestsClient
+	Requests          *armauthorization.RoleAssignmentScheduleRequestsClient // lists and validates requests
+	// Creator creates requests (activate, extend, deactivate). Unlike the other
+	// clients it has no per-attempt timeout: the SDK resends a timed-out attempt,
+	// and if the first had gone through, the resend fails as "already exists".
+	Creator           *armauthorization.RoleAssignmentScheduleRequestsClient
 	PolicyAssignments *armauthorization.RoleManagementPolicyAssignmentsClient
 	Policies          *armauthorization.RoleManagementPoliciesClient
 	Subscriptions     *armsubscriptions.Client
@@ -32,10 +36,26 @@ type Clients struct {
 	policyCache map[string]time.Duration
 }
 
+// TryTimeout caps each attempt of an Azure request that only reads. The SDK
+// retries a timed-out attempt 3 times, so a read Azure never answers fails after
+// about two minutes instead of hanging. Creating requests is exempt; see Creator.
+const TryTimeout = 30 * time.Second
+
+// clientOptions returns the ARM client options for the given cloud.
+func clientOptions(c cloud.Configuration) arm.ClientOptions {
+	return arm.ClientOptions{ClientOptions: policy.ClientOptions{
+		Cloud: c,
+		Retry: policy.RetryOptions{TryTimeout: TryTimeout},
+	}}
+}
+
 // NewClients creates authorization clients for the given cloud. The SDK takes
 // no subscriptionID in constructors; scope-based routing is done per-call.
 func NewClients(cred azcore.TokenCredential, c cloud.Configuration) (*Clients, error) {
-	opts := arm.ClientOptions{ClientOptions: policy.ClientOptions{Cloud: c}}
+	return newClients(cred, clientOptions(c))
+}
+
+func newClients(cred azcore.TokenCredential, opts arm.ClientOptions) (*Clients, error) {
 
 	eligible, err := armauthorization.NewRoleEligibilityScheduleInstancesClient(cred, &opts)
 	if err != nil {
@@ -48,6 +68,13 @@ func NewClients(cred azcore.TokenCredential, c cloud.Configuration) (*Clients, e
 	}
 
 	requests, err := armauthorization.NewRoleAssignmentScheduleRequestsClient(cred, &opts)
+	if err != nil {
+		return nil, fmt.Errorf("create schedule requests client: %w", err)
+	}
+
+	createOpts := opts
+	createOpts.Retry.TryTimeout = 0
+	creator, err := armauthorization.NewRoleAssignmentScheduleRequestsClient(cred, &createOpts)
 	if err != nil {
 		return nil, fmt.Errorf("create schedule requests client: %w", err)
 	}
@@ -71,6 +98,7 @@ func NewClients(cred azcore.TokenCredential, c cloud.Configuration) (*Clients, e
 		EligibleInstances: eligible,
 		ActiveInstances:   active,
 		Requests:          requests,
+		Creator:           creator,
 		PolicyAssignments: policyAssignments,
 		Policies:          policies,
 		Subscriptions:     subscriptions,

@@ -111,7 +111,7 @@ func TestSubmitModes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		c := &Clients{Requests: requests, Mode: tt.mode}
+		c := &Clients{Requests: requests, Creator: requests, Mode: tt.mode}
 		o, err := c.Activate(context.Background(), ActivateOptions{Scope: "/subscriptions/s", Duration: time.Hour})
 		if err != nil {
 			t.Errorf("mode %d: %v", tt.mode, err)
