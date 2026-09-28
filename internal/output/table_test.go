@@ -10,9 +10,8 @@ import (
 
 	"github.com/bgs113/azpim/internal/pim"
 
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 )
 
 func TestTruncate(t *testing.T) {
@@ -176,13 +175,9 @@ func TestTablesWithoutTerminalHaveNoEscapes(t *testing.T) {
 }
 
 func TestTableColorsStateWhenColorIsOn(t *testing.T) {
-	orig := newRenderer
-	newRenderer = func(w io.Writer) *lipgloss.Renderer {
-		r := lipgloss.NewRenderer(w)
-		r.SetColorProfile(termenv.ANSI)
-		return r
-	}
-	t.Cleanup(func() { newRenderer = orig })
+	orig := colorOutput
+	colorOutput = func(w io.Writer) io.Writer { return &colorprofile.Writer{Forward: w, Profile: colorprofile.ANSI} }
+	t.Cleanup(func() { colorOutput = orig })
 
 	var buf bytes.Buffer
 	PrintActiveTable(&buf, sampleActive(), false)

@@ -16,8 +16,8 @@ import (
 	"github.com/bgs113/azpim/internal/auth"
 	"github.com/bgs113/azpim/internal/pim"
 
+	"charm.land/huh/v2"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
@@ -317,7 +317,7 @@ func pickByLabel[T any](items []T, label, need string, itemLabel func(T) string)
 	var idx int
 	sel := huh.NewSelect[int]().Title(label).Options(opts...).Value(&idx)
 	// Scroll long lists in a fixed window so the title stays visible. Only for
-	// long lists: huh misplaces a list shorter than its height as you move.
+	// long lists: a fixed height pads a shorter list with blank rows.
 	if len(opts) > pickerRows {
 		sel.Height(pickerRows + 1) // + the title
 	}
@@ -358,7 +358,7 @@ func runPrompt(field huh.Field, need string) error {
 		return fmt.Errorf("%s is required when not running in a terminal", need)
 	}
 	err := huh.NewForm(huh.NewGroup(field)).
-		WithTheme(huh.ThemeCatppuccin()).
+		WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).
 		WithOutput(os.Stderr).
 		WithAccessible(plainPrompts()).
 		Run()
