@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -197,5 +198,38 @@ func TestSpinWithoutTerminalRunsFn(t *testing.T) {
 	})
 	if !ran || !errors.Is(err, boom) {
 		t.Errorf("ran=%v err=%v, want fn run and its error returned", ran, err)
+	}
+}
+
+func runRoot(t *testing.T, args ...string) string {
+	t.Helper()
+	var buf bytes.Buffer
+	rootCmd.SetOut(&buf)
+	rootCmd.SetArgs(args)
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetArgs(nil) })
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("azpim %v: %v", args, err)
+	}
+	return buf.String()
+}
+
+// Both ways to ask print one GNU-style line: "azpim <version>", the version
+// being everything after the last space.
+func TestVersionLine(t *testing.T) {
+	orig := rootCmd.Version
+	t.Cleanup(func() { rootCmd.Version = orig })
+	rootCmd.Version = "1.2.3"
+	for _, args := range [][]string{{"--version"}, {"version"}} {
+		if got := runRoot(t, args...); got != "azpim 1.2.3\n" {
+			t.Errorf("azpim %v = %q, want %q", args[0], got, "azpim 1.2.3\n")
+		}
+	}
+}
+
+func TestHelpEndsWithLinks(t *testing.T) {
+	for _, args := range [][]string{{"--help"}, {"activate", "--help"}} {
+		if got := runRoot(t, args...); !strings.HasSuffix(got, helpFooter) {
+			t.Errorf("azpim %v help doesn't end with the links:\n%s", args, got)
+		}
 	}
 }
