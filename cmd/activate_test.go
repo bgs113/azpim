@@ -383,3 +383,81 @@ func TestScheduledChecks(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateDuration(t *testing.T) {
+	v := validateDuration(8 * time.Hour)
+	for _, s := range []string{"4", "4h30m", "90m", " 8h "} {
+		if err := v(s); err != nil {
+			t.Errorf("validateDuration(8h)(%q) = %v, want nil", s, err)
+		}
+	}
+	for _, s := range []string{"", "abc", "0", "-1h", "9h"} {
+		if err := v(s); err == nil {
+			t.Errorf("validateDuration(8h)(%q) = nil, want error", s)
+		}
+	}
+	if err := validateDuration(0)("100h"); err != nil {
+		t.Errorf("validateDuration(0)(100h) = %v, want nil (no cap)", err)
+	}
+}
+
+func TestValidateJustification(t *testing.T) {
+	for _, s := range []string{"", "   ", "\t"} {
+		if validateJustification(s) == nil {
+			t.Errorf("validateJustification(%q) = nil, want error", s)
+		}
+	}
+	if err := validateJustification("incident 42"); err != nil {
+		t.Errorf("validateJustification = %v, want nil", err)
+	}
+}
+
+func TestPromptsWithoutTerminal(t *testing.T) {
+	orig := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+	t.Cleanup(func() { stdinIsTerminal = orig })
+
+	eligible := []pim.EligibleAssignment{
+		{RoleName: "Owner", Scope: "/subscriptions/a"},
+		{RoleName: "Owner", Scope: "/subscriptions/b"},
+	}
+	_, pickErr := selectEligible(eligible, "")
+	_, scopeErr := selectEligible(eligible, "Owner")
+	_, durErr := resolveDuration("", time.Hour)
+	_, justErr := promptJustification()
+	tests := []struct {
+		err  error
+		want string
+	}{
+		{pickErr, "--role is required when not running in a terminal"},
+		{scopeErr, scopeNeed + " is required when not running in a terminal"},
+		{durErr, "--duration is required when not running in a terminal"},
+		{justErr, "--justification is required when not running in a terminal"},
+	}
+	for _, tt := range tests {
+		if tt.err == nil || tt.err.Error() != tt.want {
+			t.Errorf("err = %v, want %q", tt.err, tt.want)
+		}
+	}
+}
+
+func TestConfirmRequest(t *testing.T) {
+	orig, origPrompted := stdinIsTerminal, prompted
+	stdinIsTerminal = func() bool { return false } // asking would fail
+	t.Cleanup(func() { stdinIsTerminal, prompted = orig, origPrompted })
+
+	prompted = false
+	if ok, err := confirmRequest(&pim.Clients{Mode: pim.Submit}, "?"); !ok || err != nil {
+		t.Errorf("flag-driven run: got %v, %v; want true without asking", ok, err)
+	}
+	prompted = true
+	if ok, err := confirmRequest(&pim.Clients{Mode: pim.DryRun}, "?"); !ok || err != nil {
+		t.Errorf("dry run: got %v, %v; want true without asking", ok, err)
+	}
+	if _, err := confirmRequest(&pim.Clients{Mode: pim.Submit}, "?"); err == nil {
+		t.Error("prompted submit: want it to ask (and fail without a terminal)")
+	}
+	if _, err := confirm("Deactivate all?", "--yes", false); err == nil || err.Error() != "--yes is required when not running in a terminal" {
+		t.Errorf("confirm without terminal: err = %v", err)
+	}
+}

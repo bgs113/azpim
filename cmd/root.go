@@ -11,12 +11,14 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/bgs113/azpim/internal/auth"
 	"github.com/bgs113/azpim/internal/pim"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
-	"github.com/manifoldco/promptui"
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
 
@@ -55,6 +57,9 @@ Authentication uses DefaultAzureCredential — run 'az login' before using this 
 func Execute(version string) {
 	rootCmd.Version = version
 	if err := rootCmd.Execute(); err != nil {
+		if errors.Is(err, errCancelled) {
+			os.Exit(130) // what the shell reports after Ctrl-C
+		}
 		fmt.Fprintln(os.Stderr, "Error:", friendlyError(err))
 		os.Exit(1)
 	}
@@ -297,24 +302,119 @@ func matchByRoleName[T any](items []T, roleFlag string, name func(T) string) []T
 	return prefix
 }
 
-// pickByLabel prompts the user to select one of items via promptui, using
-// itemLabel to render each row.
-func pickByLabel[T any](items []T, label string, itemLabel func(T) string) (T, error) {
+// pickByLabel prompts the user to select one of items, using itemLabel to
+// render each row; tabs in the label separate aligned columns. / filters the
+// list. need names the flag that would have skipped the prompt, for the error
+// when stdin isn't a terminal.
+func pickByLabel[T any](items []T, label, need string, itemLabel func(T) string) (T, error) {
 	labels := make([]string, len(items))
 	for i, a := range items {
 		labels[i] = itemLabel(a)
 	}
-	prompt := promptui.Select{
-		Label: label,
-		Items: labels,
-		Size:  15,
+	opts := make([]huh.Option[int], len(items))
+	for i, l := range alignColumns(labels) {
+		opts[i] = huh.NewOption(l, i)
 	}
-	idx, _, err := prompt.Run()
-	if err != nil {
+	var idx int
+	sel := huh.NewSelect[int]().Title(label).Options(opts...).Value(&idx)
+	// Scroll long lists in a fixed window so the title stays visible. Only for
+	// long lists: huh misplaces a list shorter than its height as you move.
+	if len(opts) > pickerRows {
+		sel.Height(pickerRows + 1) // + the title
+	}
+	if err := runPrompt(sel, need); err != nil {
 		var zero T
-		return zero, fmt.Errorf("selection cancelled")
+		return zero, err
 	}
+	echoAnswer(label, strings.ReplaceAll(labels[idx], "\t", "  "))
 	return items[idx], nil
+}
+
+// pickerRows is how many rows a long picker list shows at once.
+const pickerRows = 10
+
+// alignColumns pads tab-separated rows so their columns line up.
+func alignColumns(rows []string) []string {
+	var b strings.Builder
+	w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+	for _, r := range rows {
+		fmt.Fprintln(w, r)
+	}
+	_ = w.Flush() // writes to a strings.Builder can't fail
+	return strings.Split(strings.TrimSuffix(b.String(), "\n"), "\n")
+}
+
+// scopeNeed is the need for pickByLabel when --role matches at several scopes.
+const scopeNeed = "a scope flag (--subscription, --resource-group, --management-group or --scope)"
+
+// stdinIsTerminal is a variable so tests can pretend there is no terminal.
+var stdinIsTerminal = func() bool { return term.IsTerminal(os.Stdin.Fd()) }
+
+// runPrompt shows field on stderr, keeping stdout clean for -o json. It fails
+// without prompting when stdin isn't a terminal, naming need, the flag that
+// would have skipped the prompt. Ctrl-C returns errCancelled.
+// ACCESSIBLE=1 switches to huh's line-based mode for screen readers.
+func runPrompt(field huh.Field, need string) error {
+	if !stdinIsTerminal() {
+		return fmt.Errorf("%s is required when not running in a terminal", need)
+	}
+	err := huh.NewForm(huh.NewGroup(field)).
+		WithTheme(huh.ThemeCatppuccin()).
+		WithOutput(os.Stderr).
+		WithAccessible(plainPrompts()).
+		Run()
+	if errors.Is(err, huh.ErrUserAborted) {
+		return errCancelled
+	}
+	if err != nil {
+		return fmt.Errorf("prompt: %w", err)
+	}
+	prompted = true
+	return nil
+}
+
+// errCancelled means the user pressed Ctrl-C at a prompt. Execute exits
+// without printing it.
+var errCancelled = errors.New("cancelled")
+
+// prompted is set once the user has answered a prompt, so write commands ask
+// for confirmation only in interactive runs, never in flag-driven scripts.
+var prompted bool
+
+// confirm asks a yes/no question, preselecting def.
+func confirm(question, need string, def bool) (bool, error) {
+	ok := def
+	c := huh.NewConfirm().Title(question).Affirmative("Yes").Negative("No").Value(&ok)
+	if err := runPrompt(c, need); err != nil {
+		return false, err
+	}
+	return ok, nil
+}
+
+// confirmRequest asks before sending a request built from prompted answers.
+// It returns true without asking when nothing was prompted or the request
+// won't be submitted (--dry-run, --validate-only).
+func confirmRequest(c *pim.Clients, question string) (bool, error) {
+	if !prompted || c.Mode != pim.Submit {
+		return true, nil
+	}
+	ok, err := confirm(question, "--role", true)
+	if err == nil && !ok {
+		fmt.Fprintln(os.Stderr, "Nothing sent.")
+	}
+	return ok, err
+}
+
+// plainPrompts reports whether to use huh's line-based prompts, which print
+// each question and read a typed answer, instead of the interactive UI.
+func plainPrompts() bool { return os.Getenv("ACCESSIBLE") != "" }
+
+// echoAnswer leaves "title: answer" on stderr, since huh clears the prompt
+// once it's answered. Plain prompts already leave the typed answer on screen.
+func echoAnswer(title, answer string) {
+	if !plainPrompts() {
+		fmt.Fprintf(os.Stderr, "%s: %s\n", title, strings.TrimSpace(answer))
+	}
 }
 
 // resolvePrincipal returns the caller's object ID for write commands and

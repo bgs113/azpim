@@ -100,6 +100,10 @@ Examples:
 			TicketSystem:  extendTicketSystem,
 		}
 
+		if ok, err := confirmRequest(clients, fmt.Sprintf("Extend %q at %q for %s?", selected.RoleName, selected.Resource, pim.FormatDuration(dur))); !ok {
+			return err
+		}
+
 		fmt.Fprintf(os.Stderr, "Extending %q for %s...\n", selected.RoleName, pim.FormatDuration(dur))
 		outcome, err := clients.Extend(ctx, opts)
 		if err != nil {

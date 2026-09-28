@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Interactive prompts now use [huh](https://github.com/charmbracelet/huh) instead of the unmaintained promptui. Press `/` to filter the role picker. Ctrl-C cancels quietly, exiting with status 130 instead of printing `Error: selection cancelled`. Prompts draw on stderr, so `-o json` output stays clean. Each answer stays on screen after you press Enter, and picker columns line up however long the role names are.
+- `deactivate --all` asks for confirmation with the same prompts. Without a terminal it now fails with `--yes is required when not running in a terminal` instead of silently deactivating nothing.
+- When stdin isn't a terminal, azpim no longer tries to prompt. It exits with an error naming the missing flag, e.g. `--role is required when not running in a terminal`.
+
+### Added
+- When you answered any prompts, `activate`, `extend` and `deactivate` ask you to confirm the request before sending it. Runs driven entirely by flags, `--dry-run` and `--validate-only` don't ask.
+- `ACCESSIBLE=1` switches to plain line-based prompts: a numbered list to pick from and typed answers, for screen readers or if you prefer them to the interactive UI.
+
 ## [1.1.2] - 2026-09-26
 
 ### Added

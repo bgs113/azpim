@@ -66,14 +66,19 @@ Examples:
 
 		if deactivateAll {
 			fmt.Fprintln(os.Stderr, "Active roles to be deactivated:")
-			for _, a := range active {
-				fmt.Fprintf(os.Stderr, "  • %-40s  %s  (%s remaining)\n", a.RoleName, a.Resource, a.TimeRemaining(false))
+			rows := make([]string, len(active))
+			for i, a := range active {
+				rows[i] = activeLabel(a)
+			}
+			for _, r := range alignColumns(rows) {
+				fmt.Fprintf(os.Stderr, "  • %s\n", r)
 			}
 			if !deactivateYes && clients.Mode == pim.Submit {
-				fmt.Fprintf(os.Stderr, "Deactivate all %d role(s)? [y/N] ", len(active))
-				var answer string
-				fmt.Fscanln(os.Stdin, &answer) // #nosec G104
-				if strings.ToLower(strings.TrimSpace(answer)) != "y" {
+				ok, err := confirm(fmt.Sprintf("Deactivate all %d role(s)?", len(active)), "--yes", false)
+				if err != nil {
+					return err
+				}
+				if !ok {
 					fmt.Fprintln(os.Stderr, "No roles deactivated.")
 					return nil
 				}
@@ -111,6 +116,10 @@ Examples:
 
 		selected, err := selectActive(active, deactivateRole, "deactivate")
 		if err != nil {
+			return err
+		}
+
+		if ok, err := confirmRequest(clients, fmt.Sprintf("Deactivate %q at %q?", selected.RoleName, selected.Resource)); !ok {
 			return err
 		}
 
@@ -152,13 +161,13 @@ func selectActive(active []pim.ActiveAssignment, roleFlag, action string) (pim.A
 		if len(matches) == 1 {
 			return matches[0], nil
 		}
-		return pickByLabel(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag), activeLabel)
+		return pickByLabel(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag), scopeNeed, activeLabel)
 	}
-	return pickByLabel(active, "Select active role to "+action, activeLabel)
+	return pickByLabel(active, "Select active role to "+action, "--role", activeLabel)
 }
 
 func activeLabel(a pim.ActiveAssignment) string {
-	return fmt.Sprintf("%-40s  %s  (%s remaining)", a.RoleName, a.Resource, a.TimeRemaining(false))
+	return fmt.Sprintf("%s\t%s\t(%s remaining)", a.RoleName, a.Resource, a.TimeRemaining(false))
 }
 
 type deactivateResult struct {
