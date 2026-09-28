@@ -3,6 +3,8 @@ package output
 import (
 	"fmt"
 	"io"
+	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -10,6 +12,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/term"
 )
 
 // ANSI colors for state and status cells. Lip Gloss drops them when w isn't a
@@ -24,6 +28,17 @@ const (
 // newRenderer picks colors for w; tests replace it to force a color profile.
 var newRenderer = func(w io.Writer) *lipgloss.Renderer { return lipgloss.NewRenderer(w) }
 
+// termWidth returns w's width in columns when w is a terminal, else 0; tests
+// replace it to fake a terminal.
+var termWidth = func(w io.Writer) int {
+	if f, ok := w.(*os.File); ok && term.IsTerminal(f.Fd()) {
+		if cols, _, err := term.GetSize(f.Fd()); err == nil {
+			return cols
+		}
+	}
+	return 0
+}
+
 // column describes one table column. color, if set, picks a cell's color from
 // its text; right right-aligns the column.
 type column struct {
@@ -33,12 +48,20 @@ type column struct {
 }
 
 // writeTable writes rows under cols as a table with no outer border, a rule
-// under the header and │ between columns. Long cells are not wrapped.
+// under the header and │ between columns. When w is a terminal too narrow for
+// the table, long cells wrap onto extra lines within their column; otherwise
+// every row stays on one line, so piped output keeps one row per line.
 func writeTable(w io.Writer, cols []column, rows [][]string) {
 	r := newRenderer(w)
 	headers := make([]string, len(cols))
 	for i, c := range cols {
 		headers[i] = c.header
+	}
+	// In a terminal, fit the columns to its width; cells wrap within them.
+	var widths []int
+	if max := termWidth(w); max > 0 {
+		natural, floors := cellWidths(headers, rows)
+		widths = fitWidths(natural, floors, max-(len(cols)-1)) // - the │ separators
 	}
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
@@ -48,6 +71,9 @@ func writeTable(w io.Writer, cols []column, rows [][]string) {
 		Rows(rows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
 			s := r.NewStyle().Padding(0, 1)
+			if widths != nil {
+				s = s.Width(widths[col])
+			}
 			if cols[col].right && row != table.HeaderRow {
 				s = s.Align(lipgloss.Right)
 			}
@@ -59,6 +85,55 @@ func writeTable(w io.Writer, cols []column, rows [][]string) {
 			return s
 		})
 	fmt.Fprintln(w, t)
+}
+
+// cellWidths returns each column's natural width, its widest cell or header,
+// and its floor, its widest header or single word, so wrapping never splits a
+// word or cuts off a header (Lip Gloss truncates headers rather than wrapping
+// them). Both include the one-space padding either side.
+func cellWidths(headers []string, rows [][]string) (widths, floors []int) {
+	widths = make([]int, len(headers))
+	floors = make([]int, len(headers))
+	for i, h := range headers {
+		floors[i] = ansi.StringWidth(h) + 2
+		widths[i] = floors[i]
+	}
+	for _, row := range rows {
+		for i, cell := range row {
+			widths[i] = max(widths[i], ansi.StringWidth(cell)+2)
+			for _, word := range strings.Fields(cell) {
+				floors[i] = max(floors[i], ansi.StringWidth(word)+2)
+			}
+		}
+	}
+	return widths, floors
+}
+
+// fitWidths narrows the widest columns, one column at a time, until the widths
+// sum to at most total, so short columns keep their full width. No column goes
+// below its floor; if the floors alone don't fit, the table stays too wide.
+func fitWidths(widths, floors []int, total int) []int {
+	w := slices.Clone(widths)
+	for sum(w) > total {
+		widest := -1
+		for i := range w {
+			if w[i] > floors[i] && (widest < 0 || w[i] > w[widest]) {
+				widest = i
+			}
+		}
+		if widest < 0 {
+			break
+		}
+		w[widest]--
+	}
+	return w
+}
+
+func sum(ns []int) (n int) {
+	for _, v := range ns {
+		n += v
+	}
+	return n
 }
 
 func stateColor(state string) lipgloss.TerminalColor {

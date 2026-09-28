@@ -232,3 +232,44 @@ func TestActiveTableRightAlignsTimeRemaining(t *testing.T) {
 		}
 	}
 }
+
+func TestTableWrapsOnlyInNarrowTerminal(t *testing.T) {
+	orig := termWidth
+	t.Cleanup(func() { termWidth = orig })
+	rows := []pim.EligibleAssignment{
+		{RoleName: "Azure Kubernetes Service RBAC Cluster Admin", ScopeDisplay: "sub-example-prod", ResourceType: "Subscription", MembershipType: "Group"},
+		{RoleName: "Azure Kubernetes Service RBAC Cluster User", ScopeDisplay: "sub-example-prod", ResourceType: "Subscription", MembershipType: "Group"},
+	}
+	render := func(width int) []string {
+		termWidth = func(io.Writer) int { return width }
+		var buf bytes.Buffer
+		PrintEligibleTable(&buf, rows)
+		return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	}
+
+	piped := render(0)
+	if len(piped) != 4 {
+		t.Fatalf("not a terminal: got %d lines, want header, rule and one line per row:\n%s", len(piped), strings.Join(piped, "\n"))
+	}
+	if wide := render(500); !slices.Equal(wide, piped) {
+		t.Errorf("wide terminal changed the table:\n%s", strings.Join(wide, "\n"))
+	}
+
+	narrow := render(90) // the widest words and headers need 84
+	out := strings.Join(narrow, "\n")
+	for _, l := range narrow {
+		if w := ansi.StringWidth(l); w > 90 {
+			t.Errorf("line is %d columns wide, want at most 90: %q", w, l)
+		}
+	}
+	if len(narrow) <= len(piped) {
+		t.Errorf("narrow terminal: want wrapped rows, got:\n%s", out)
+	}
+	// Nothing is cut off and no word is split, so the parts that tell the two
+	// roles apart survive.
+	for _, word := range []string{"Admin", "User", "sub-example-prod"} {
+		if !strings.Contains(out, word) {
+			t.Errorf("narrow terminal lost %q:\n%s", word, out)
+		}
+	}
+}
