@@ -18,6 +18,7 @@ var (
 
 var activeCmd = &cobra.Command{
 	Use:   "active",
+	Args:  cobra.NoArgs,
 	Short: "List active PIM role assignments",
 	Long: `List active (time-bound) PIM role assignments for the current principal.
 
@@ -64,5 +65,6 @@ Scope examples:
 func init() {
 	addScopeFlags(activeCmd, &activeScope)
 	addOutputFlags(activeCmd, &activeOutput)
+	activeCmd.Flags().BoolVar(&activeOutput.HumanReadable, "human", false, `Use human-readable time remaining format (e.g. "1h 32m 5s")`)
 	activeCmd.Flags().BoolVar(&activeIncludePermanent, "include-permanent", false, "Include permanently-assigned roles (not shown by default)")
 }

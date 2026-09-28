@@ -23,6 +23,7 @@ var (
 
 var deactivateCmd = &cobra.Command{
 	Use:   "deactivate",
+	Args:  cobra.NoArgs,
 	Short: "Deactivate an active PIM role assignment",
 	Long: `Deactivate an active (time-bound) PIM role assignment for the current principal.
 

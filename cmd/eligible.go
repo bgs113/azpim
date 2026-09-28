@@ -17,6 +17,7 @@ var (
 
 var eligibleCmd = &cobra.Command{
 	Use:   "eligible",
+	Args:  cobra.NoArgs,
 	Short: "List eligible PIM role assignments",
 	Long: `List all PIM-eligible role assignments for the current principal.
 

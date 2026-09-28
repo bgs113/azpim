@@ -18,6 +18,7 @@ var (
 
 var requestsCmd = &cobra.Command{
 	Use:   "requests",
+	Args:  cobra.NoArgs,
 	Short: "List your PIM role assignment requests",
 	Long: `List role assignment schedule requests for you (your own activation requests,
 plus any an admin made on your behalf).

@@ -37,7 +37,7 @@ var cloudName string
 // outputFlags holds output format flags.
 type outputFlags struct {
 	Format        string // "table" or "json"
-	HumanReadable bool   // --human for "1h 32m" style time remaining
+	HumanReadable bool   // --human for "1h 32m" style time remaining (active only)
 }
 
 var rootCmd = &cobra.Command{
@@ -275,10 +275,9 @@ func isNotFound(err error) bool {
 	return respErr.StatusCode == http.StatusNotFound
 }
 
-// addOutputFlags registers output format flags on a command.
+// addOutputFlags registers the output format flag on a command.
 func addOutputFlags(cmd *cobra.Command, flags *outputFlags) {
 	cmd.Flags().StringVarP(&flags.Format, "output", "o", "table", `Output format: "table" or "json"`)
-	cmd.Flags().BoolVar(&flags.HumanReadable, "human", false, `Use human-readable time remaining format (e.g. "1h 32m 5s")`)
 }
 
 // matchByRoleName returns items whose name exactly matches roleFlag

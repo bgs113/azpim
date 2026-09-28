@@ -24,6 +24,7 @@ var (
 
 var extendCmd = &cobra.Command{
 	Use:   "extend",
+	Args:  cobra.NoArgs,
 	Short: "Extend an active PIM role assignment",
 	Long: `Request an extension of an active (time-bound) PIM role assignment.
 
