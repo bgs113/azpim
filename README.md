@@ -374,6 +374,8 @@ The scope flags don't read environment variables, so a subscription left in `AZU
 | `-o, --output table\|json` | Output format (default: `table`). On every command that lists or changes assignments                         |
 | `--human`                  | Human-readable TIME REMAINING (`1h 32m 5s` instead of `01:32:05`). `azpim active` only                        |
 
+Tables and JSON go to stdout; messages, prompts and the spinner go to stderr. When nothing is found, table output writes nothing to stdout and prints the message (e.g. `No active assignments found.`) on stderr, and `-o json` prints `[]`. Either way the exit status is 0, so a script can tell "none" from a failure without matching text.
+
 ### Progress and timeouts
 
 While azpim signs in, fetches assignments or reads a role's policy, a spinner shows on stderr. It appears only when stdin and stderr are both terminals, so piped, redirected and CI output never contains it. It's also off with `ACCESSIBLE=1` and on `TERM=dumb`. Ctrl-C while it spins cancels the command with status 130.

@@ -164,10 +164,12 @@ func requestStatusColor(status string) color.Color {
 	return nil
 }
 
-// PrintEligibleTable writes eligible assignments as an aligned table to w.
-func PrintEligibleTable(w io.Writer, assignments []pim.EligibleAssignment) {
+// PrintEligibleTable writes eligible assignments as an aligned table to w. When
+// there are none it writes nothing to w and says so on msg (stderr), so a
+// pipeline reading w sees empty output.
+func PrintEligibleTable(w, msg io.Writer, assignments []pim.EligibleAssignment) {
 	if len(assignments) == 0 {
-		fmt.Fprintln(w, "No eligible assignments found.")
+		fmt.Fprintln(msg, "No eligible assignments found.")
 		return
 	}
 
@@ -185,10 +187,11 @@ func PrintEligibleTable(w io.Writer, assignments []pim.EligibleAssignment) {
 }
 
 // PrintActiveTable writes active assignments as an aligned table to w.
-// humanReadable controls the format of the Time remaining column.
-func PrintActiveTable(w io.Writer, assignments []pim.ActiveAssignment, humanReadable bool) {
+// humanReadable controls the format of the Time remaining column. Like
+// PrintEligibleTable, it reports an empty result on msg, not w.
+func PrintActiveTable(w, msg io.Writer, assignments []pim.ActiveAssignment, humanReadable bool) {
 	if len(assignments) == 0 {
-		fmt.Fprintln(w, "No active assignments found.")
+		fmt.Fprintln(msg, "No active assignments found.")
 		return
 	}
 
@@ -207,8 +210,9 @@ func PrintActiveTable(w io.Writer, assignments []pim.ActiveAssignment, humanRead
 }
 
 // PrintRequestsTable writes schedule requests as an aligned table to w.
-// If pendingOnly is true, only requests with status "Pending" are shown.
-func PrintRequestsTable(w io.Writer, requests []pim.ScheduleRequestEntry, pendingOnly bool) {
+// If pendingOnly is true, only requests with status "Pending" are shown. Like
+// PrintEligibleTable, it reports an empty result on msg, not w.
+func PrintRequestsTable(w, msg io.Writer, requests []pim.ScheduleRequestEntry, pendingOnly bool) {
 	var rows [][]string
 	for _, r := range requests {
 		if pendingOnly && r.Status != "Pending" {
@@ -227,9 +231,9 @@ func PrintRequestsTable(w io.Writer, requests []pim.ScheduleRequestEntry, pendin
 
 	if len(rows) == 0 {
 		if pendingOnly {
-			fmt.Fprintln(w, "No pending requests found.")
+			fmt.Fprintln(msg, "No pending requests found.")
 		} else {
-			fmt.Fprintln(w, "No requests found.")
+			fmt.Fprintln(msg, "No requests found.")
 		}
 		return
 	}

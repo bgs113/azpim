@@ -3,6 +3,7 @@ package output
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -168,5 +169,27 @@ func TestPrintActiveJSON(t *testing.T) {
 	remaining, ok := out[0]["time_remaining_seconds"].(float64)
 	if !ok || remaining <= 0 {
 		t.Errorf("expected positive time_remaining_seconds, got %v", out[0]["time_remaining_seconds"])
+	}
+}
+
+// An empty result is still valid JSON on stdout: an empty array, not null or
+// a message, so `azpim active -o json | jq length` gives 0.
+func TestJSONEmptyResultIsEmptyArray(t *testing.T) {
+	tests := []struct {
+		name  string
+		print func(w *bytes.Buffer) error
+	}{
+		{"eligible", func(w *bytes.Buffer) error { return PrintEligibleJSON(w, nil) }},
+		{"active", func(w *bytes.Buffer) error { return PrintActiveJSON(w, nil, false) }},
+		{"requests", func(w *bytes.Buffer) error { return PrintRequestsJSON(w, nil, false) }},
+	}
+	for _, tt := range tests {
+		var buf bytes.Buffer
+		if err := tt.print(&buf); err != nil {
+			t.Fatalf("%s: %v", tt.name, err)
+		}
+		if got := strings.TrimSpace(buf.String()); got != "[]" {
+			t.Errorf("%s: got %q, want []", tt.name, got)
+		}
 	}
 }

@@ -57,7 +57,7 @@ Scope examples:
 		case "json":
 			return output.PrintRequestsJSON(os.Stdout, requests, requestsPending)
 		case "table":
-			output.PrintRequestsTable(os.Stdout, requests, requestsPending)
+			output.PrintRequestsTable(os.Stdout, os.Stderr, requests, requestsPending)
 			return nil
 		default:
 			return fmt.Errorf("unknown output format %q (use table or json)", requestsOutput.Format)
