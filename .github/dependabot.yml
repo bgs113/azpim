@@ -13,6 +13,13 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # v2.0.6 requires an ultraviolet build (2026-08-11) whose inline renderer
+      # leaves huh prompts partly on screen after they're answered. Unit tests
+      # can't catch it, so check prompts in a real terminal before taking a
+      # newer Lip Gloss.
+      - dependency-name: "charm.land/lipgloss/v2"
+        versions: ["2.0.6"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"image/color"
 	"io"
 	"os"
 	"slices"
@@ -10,23 +11,26 @@ import (
 
 	"github.com/bgs113/azpim/internal/pim"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
+	"github.com/charmbracelet/colorprofile"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
 )
 
-// ANSI colors for state and status cells. Lip Gloss drops them when w isn't a
-// terminal or NO_COLOR is set.
+// ANSI colors for state and status cells. colorOutput drops them when w isn't
+// a terminal or NO_COLOR is set.
 const (
-	green  = lipgloss.Color("2")
-	yellow = lipgloss.Color("3")
-	red    = lipgloss.Color("1")
-	cyan   = lipgloss.Color("6")
+	green  = lipgloss.Green
+	yellow = lipgloss.Yellow
+	red    = lipgloss.Red
+	cyan   = lipgloss.Cyan
 )
 
-// newRenderer picks colors for w; tests replace it to force a color profile.
-var newRenderer = func(w io.Writer) *lipgloss.Renderer { return lipgloss.NewRenderer(w) }
+// colorOutput wraps w so colors are kept, downsampled or stripped to suit it:
+// stripped when w isn't a terminal, or NO_COLOR or TERM=dumb is set. Tests
+// replace it to force a color profile.
+var colorOutput = func(w io.Writer) io.Writer { return colorprofile.NewWriter(w, os.Environ()) }
 
 // termWidth returns w's width in columns when w is a terminal, else 0; tests
 // replace it to fake a terminal.
@@ -44,7 +48,7 @@ var termWidth = func(w io.Writer) int {
 type column struct {
 	header string
 	right  bool
-	color  func(string) lipgloss.TerminalColor
+	color  func(string) color.Color
 }
 
 // writeTable writes rows under cols as a table with no outer border, a rule
@@ -52,7 +56,6 @@ type column struct {
 // the table, long cells wrap onto extra lines within their column; otherwise
 // every row stays on one line, so piped output keeps one row per line.
 func writeTable(w io.Writer, cols []column, rows [][]string) {
-	r := newRenderer(w)
 	headers := make([]string, len(cols))
 	for i, c := range cols {
 		headers[i] = c.header
@@ -66,11 +69,10 @@ func writeTable(w io.Writer, cols []column, rows [][]string) {
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
 		BorderTop(false).BorderBottom(false).BorderLeft(false).BorderRight(false).
-		BorderStyle(r.NewStyle()).
 		Headers(headers...).
 		Rows(rows...).
 		StyleFunc(func(row, col int) lipgloss.Style {
-			s := r.NewStyle().Padding(0, 1)
+			s := lipgloss.NewStyle().Padding(0, 1)
 			if widths != nil {
 				s = s.Width(widths[col])
 			}
@@ -78,13 +80,13 @@ func writeTable(w io.Writer, cols []column, rows [][]string) {
 				s = s.Align(lipgloss.Right)
 			}
 			if c := cols[col].color; c != nil && row != table.HeaderRow {
-				if color := c(rows[row][col]); color != nil {
-					s = s.Foreground(color)
+				if fg := c(rows[row][col]); fg != nil {
+					s = s.Foreground(fg)
 				}
 			}
 			return s
 		})
-	fmt.Fprintln(w, t)
+	fmt.Fprintln(colorOutput(w), t)
 }
 
 // cellWidths returns each column's natural width, its widest cell or header,
@@ -136,7 +138,7 @@ func sum(ns []int) (n int) {
 	return n
 }
 
-func stateColor(state string) lipgloss.TerminalColor {
+func stateColor(state string) color.Color {
 	switch strings.ToLower(state) {
 	case "active":
 		return green
@@ -150,7 +152,7 @@ func stateColor(state string) lipgloss.TerminalColor {
 	return nil
 }
 
-func requestStatusColor(status string) lipgloss.TerminalColor {
+func requestStatusColor(status string) color.Color {
 	switch strings.ToLower(status) {
 	case "active":
 		return green
