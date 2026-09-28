@@ -4,80 +4,162 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/bgs113/azpim/internal/pim"
 
-	"github.com/olekukonko/tablewriter"
-	"github.com/olekukonko/tablewriter/renderer"
-	"github.com/olekukonko/tablewriter/tw"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/term"
 )
 
-// ANSI color codes (only applied when stdout is a terminal).
+// ANSI colors for state and status cells. Lip Gloss drops them when w isn't a
+// terminal or NO_COLOR is set.
 const (
-	colorReset  = "\033[0m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-	colorRed    = "\033[31m"
-	colorCyan   = "\033[36m"
+	green  = lipgloss.Color("2")
+	yellow = lipgloss.Color("3")
+	red    = lipgloss.Color("1")
+	cyan   = lipgloss.Color("6")
 )
 
-func colorize(text, color string) string {
-	if fileInfo, _ := os.Stdout.Stat(); (fileInfo.Mode() & os.ModeCharDevice) == 0 {
-		return text
+// newRenderer picks colors for w; tests replace it to force a color profile.
+var newRenderer = func(w io.Writer) *lipgloss.Renderer { return lipgloss.NewRenderer(w) }
+
+// termWidth returns w's width in columns when w is a terminal, else 0; tests
+// replace it to fake a terminal.
+var termWidth = func(w io.Writer) int {
+	if f, ok := w.(*os.File); ok && term.IsTerminal(f.Fd()) {
+		if cols, _, err := term.GetSize(f.Fd()); err == nil {
+			return cols
+		}
 	}
-	return color + text + colorReset
+	return 0
 }
 
-func stateColor(state string) string {
+// column describes one table column. color, if set, picks a cell's color from
+// its text; right right-aligns the column.
+type column struct {
+	header string
+	right  bool
+	color  func(string) lipgloss.TerminalColor
+}
+
+// writeTable writes rows under cols as a table with no outer border, a rule
+// under the header and │ between columns. When w is a terminal too narrow for
+// the table, long cells wrap onto extra lines within their column; otherwise
+// every row stays on one line, so piped output keeps one row per line.
+func writeTable(w io.Writer, cols []column, rows [][]string) {
+	r := newRenderer(w)
+	headers := make([]string, len(cols))
+	for i, c := range cols {
+		headers[i] = c.header
+	}
+	// In a terminal, fit the columns to its width; cells wrap within them.
+	var widths []int
+	if max := termWidth(w); max > 0 {
+		natural, floors := cellWidths(headers, rows)
+		widths = fitWidths(natural, floors, max-(len(cols)-1)) // - the │ separators
+	}
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderTop(false).BorderBottom(false).BorderLeft(false).BorderRight(false).
+		BorderStyle(r.NewStyle()).
+		Headers(headers...).
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			s := r.NewStyle().Padding(0, 1)
+			if widths != nil {
+				s = s.Width(widths[col])
+			}
+			if cols[col].right && row != table.HeaderRow {
+				s = s.Align(lipgloss.Right)
+			}
+			if c := cols[col].color; c != nil && row != table.HeaderRow {
+				if color := c(rows[row][col]); color != nil {
+					s = s.Foreground(color)
+				}
+			}
+			return s
+		})
+	fmt.Fprintln(w, t)
+}
+
+// cellWidths returns each column's natural width, its widest cell or header,
+// and its floor, its widest header or single word, so wrapping never splits a
+// word or cuts off a header (Lip Gloss truncates headers rather than wrapping
+// them). Both include the one-space padding either side.
+func cellWidths(headers []string, rows [][]string) (widths, floors []int) {
+	widths = make([]int, len(headers))
+	floors = make([]int, len(headers))
+	for i, h := range headers {
+		floors[i] = ansi.StringWidth(h) + 2
+		widths[i] = floors[i]
+	}
+	for _, row := range rows {
+		for i, cell := range row {
+			widths[i] = max(widths[i], ansi.StringWidth(cell)+2)
+			for _, word := range strings.Fields(cell) {
+				floors[i] = max(floors[i], ansi.StringWidth(word)+2)
+			}
+		}
+	}
+	return widths, floors
+}
+
+// fitWidths narrows the widest columns, one column at a time, until the widths
+// sum to at most total, so short columns keep their full width. No column goes
+// below its floor; if the floors alone don't fit, the table stays too wide.
+func fitWidths(widths, floors []int, total int) []int {
+	w := slices.Clone(widths)
+	for sum(w) > total {
+		widest := -1
+		for i := range w {
+			if w[i] > floors[i] && (widest < 0 || w[i] > w[widest]) {
+				widest = i
+			}
+		}
+		if widest < 0 {
+			break
+		}
+		w[widest]--
+	}
+	return w
+}
+
+func sum(ns []int) (n int) {
+	for _, v := range ns {
+		n += v
+	}
+	return n
+}
+
+func stateColor(state string) lipgloss.TerminalColor {
 	switch strings.ToLower(state) {
 	case "active":
-		return colorize(state, colorGreen)
+		return green
 	case "permanent":
-		return colorize(state, colorCyan)
+		return cyan
 	case "pending":
-		return colorize(state, colorYellow)
+		return yellow
 	case "failed", "expired":
-		return colorize(state, colorRed)
-	default:
-		return state
+		return red
 	}
+	return nil
 }
 
-// appendRow appends row to t, printing any error to w rather than failing.
-func appendRow(w io.Writer, t *tablewriter.Table, row []string) {
-	if err := t.Append(row); err != nil {
-		fmt.Fprintf(w, "error appending row: %v\n", err)
+func requestStatusColor(status string) lipgloss.TerminalColor {
+	switch strings.ToLower(status) {
+	case "active":
+		return green
+	case "pending", "scheduled":
+		return yellow
+	case "denied", "failed":
+		return red
 	}
-}
-
-// renderTable renders t to its writer, printing any error to w rather than failing.
-func renderTable(w io.Writer, t *tablewriter.Table) {
-	if err := t.Render(); err != nil {
-		fmt.Fprintf(w, "error rendering table: %v\n", err)
-	}
-}
-
-// borderlessRendition returns a Rendition with no outer borders but a header separator.
-func borderlessRendition() tw.Rendition {
-	return tw.Rendition{
-		Borders: tw.Border{
-			Left:   tw.Off,
-			Right:  tw.Off,
-			Top:    tw.Off,
-			Bottom: tw.Off,
-		},
-		Settings: tw.Settings{
-			Separators: tw.Separators{
-				BetweenRows:    tw.Off,
-				BetweenColumns: tw.On,
-			},
-			Lines: tw.Lines{
-				ShowHeaderLine: tw.On,
-			},
-		},
-	}
+	return nil
 }
 
 // PrintEligibleTable writes eligible assignments as an aligned table to w.
@@ -87,32 +169,17 @@ func PrintEligibleTable(w io.Writer, assignments []pim.EligibleAssignment) {
 		return
 	}
 
-	t := tablewriter.NewTable(w,
-		tablewriter.WithRenderer(renderer.NewBlueprint(borderlessRendition())),
-		tablewriter.WithHeaderAlignment(tw.AlignLeft),
-		tablewriter.WithRowAlignment(tw.AlignLeft),
-	)
-	t.Header("ROLE", "SCOPE", "RESOURCE TYPE", "MEMBERSHIP", "CONDITION", "END TIME")
-
-	for _, a := range assignments {
+	rows := make([][]string, len(assignments))
+	for i, a := range assignments {
 		end := "-"
 		if a.HasExpiry {
 			end = formatTime(a.EndTime)
 		}
-		cond := truncate(a.Condition, 40)
-		if cond == "" {
-			cond = "-"
-		}
-		appendRow(w, t, []string{
-			a.RoleName,
-			a.ScopeDisplay,
-			a.ResourceType,
-			a.MembershipType,
-			cond,
-			end,
-		})
+		rows[i] = []string{a.RoleName, a.ScopeDisplay, a.ResourceType, a.MembershipType, orDash(truncate(a.Condition, 40)), end}
 	}
-	renderTable(w, t)
+	writeTable(w, []column{
+		{header: "ROLE"}, {header: "SCOPE"}, {header: "RESOURCE TYPE"}, {header: "MEMBERSHIP"}, {header: "CONDITION"}, {header: "END TIME"},
+	}, rows)
 }
 
 // PrintActiveTable writes active assignments as an aligned table to w.
@@ -123,54 +190,37 @@ func PrintActiveTable(w io.Writer, assignments []pim.ActiveAssignment, humanRead
 		return
 	}
 
-	t := tablewriter.NewTable(w,
-		tablewriter.WithRenderer(renderer.NewBlueprint(borderlessRendition())),
-		tablewriter.WithHeaderAlignment(tw.AlignLeft),
-		tablewriter.WithAlignment(tw.Alignment{
-			tw.AlignLeft,  // Role
-			tw.AlignLeft,  // Resource
-			tw.AlignLeft,  // Resource type
-			tw.AlignLeft,  // Membership
-			tw.AlignLeft,  // Condition
-			tw.AlignLeft,  // State
-			tw.AlignLeft,  // End time
-			tw.AlignRight, // Time remaining
-		}),
-	)
-	t.Header("ROLE", "RESOURCE", "RESOURCE TYPE", "MEMBERSHIP", "CONDITION", "STATE", "END TIME", "TIME REMAINING")
-
-	for _, a := range assignments {
+	rows := make([][]string, len(assignments))
+	for i, a := range assignments {
 		end := "-"
 		if a.HasExpiry {
 			end = formatTime(a.EndTime)
 		}
-		cond := truncate(a.Condition, 40)
-		if cond == "" {
-			cond = "-"
-		}
-		appendRow(w, t, []string{
-			a.RoleName,
-			a.Resource,
-			a.ResourceType,
-			a.MembershipType,
-			cond,
-			stateColor(a.State),
-			end,
-			a.TimeRemaining(humanReadable),
-		})
+		rows[i] = []string{a.RoleName, a.Resource, a.ResourceType, a.MembershipType, orDash(truncate(a.Condition, 40)), a.State, end, a.TimeRemaining(humanReadable)}
 	}
-	renderTable(w, t)
+	writeTable(w, []column{
+		{header: "ROLE"}, {header: "RESOURCE"}, {header: "RESOURCE TYPE"}, {header: "MEMBERSHIP"}, {header: "CONDITION"},
+		{header: "STATE", color: stateColor}, {header: "END TIME"}, {header: "TIME REMAINING", right: true},
+	}, rows)
 }
 
 // PrintRequestsTable writes schedule requests as an aligned table to w.
 // If pendingOnly is true, only requests with status "Pending" are shown.
 func PrintRequestsTable(w io.Writer, requests []pim.ScheduleRequestEntry, pendingOnly bool) {
-	var rows []pim.ScheduleRequestEntry
+	var rows [][]string
 	for _, r := range requests {
 		if pendingOnly && r.Status != "Pending" {
 			continue
 		}
-		rows = append(rows, r)
+		requested := "-"
+		if r.HasRequestedAt {
+			requested = formatTime(r.RequestedAt)
+		}
+		expires := "-"
+		if r.HasExpiry {
+			expires = formatTime(r.ExpiresAt)
+		}
+		rows = append(rows, []string{r.RoleName, r.ScopeDisplay, r.RequestType, r.Status, requested, expires, orDash(truncate(r.Justification, 40))})
 	}
 
 	if len(rows) == 0 {
@@ -182,50 +232,18 @@ func PrintRequestsTable(w io.Writer, requests []pim.ScheduleRequestEntry, pendin
 		return
 	}
 
-	t := tablewriter.NewTable(w,
-		tablewriter.WithRenderer(renderer.NewBlueprint(borderlessRendition())),
-		tablewriter.WithHeaderAlignment(tw.AlignLeft),
-		tablewriter.WithRowAlignment(tw.AlignLeft),
-	)
-	t.Header("ROLE", "SCOPE", "TYPE", "STATUS", "REQUESTED", "EXPIRES", "JUSTIFICATION")
-
-	for _, r := range rows {
-		requested := "-"
-		if r.HasRequestedAt {
-			requested = formatTime(r.RequestedAt)
-		}
-		expires := "-"
-		if r.HasExpiry {
-			expires = formatTime(r.ExpiresAt)
-		}
-		just := truncate(r.Justification, 40)
-		if just == "" {
-			just = "-"
-		}
-		appendRow(w, t, []string{
-			r.RoleName,
-			r.ScopeDisplay,
-			r.RequestType,
-			requestStatusColor(r.Status),
-			requested,
-			expires,
-			just,
-		})
-	}
-	renderTable(w, t)
+	writeTable(w, []column{
+		{header: "ROLE"}, {header: "SCOPE"}, {header: "TYPE"}, {header: "STATUS", color: requestStatusColor},
+		{header: "REQUESTED"}, {header: "EXPIRES"}, {header: "JUSTIFICATION"},
+	}, rows)
 }
 
-func requestStatusColor(status string) string {
-	switch strings.ToLower(status) {
-	case "active":
-		return colorize(status, colorGreen)
-	case "pending", "scheduled":
-		return colorize(status, colorYellow)
-	case "denied", "failed":
-		return colorize(status, colorRed)
-	default:
-		return status
+// orDash returns s, or "-" when s is empty.
+func orDash(s string) string {
+	if s == "" {
+		return "-"
 	}
+	return s
 }
 
 func formatTime(t time.Time) string {
