@@ -56,9 +56,18 @@ Authentication uses DefaultAzureCredential — run 'az login' before using this 
 	SilenceErrors: true,
 }
 
+// helpFooter ends every command's --help with where to read more and report
+// problems.
+const helpFooter = `
+Documentation: https://github.com/bgs113/azpim#readme
+Report issues: https://github.com/bgs113/azpim/issues
+`
+
 // Execute is the entry point called from main.
 func Execute(version string) {
-	rootCmd.Version = version
+	// Tags are v1.2.3; print 1.2.3, so the version is everything after the
+	// last space of "azpim 1.2.3" (GNU --version convention).
+	rootCmd.Version = strings.TrimPrefix(version, "v")
 	if err := rootCmd.Execute(); err != nil {
 		if errors.Is(err, errCancelled) {
 			os.Exit(130) // what the shell reports after Ctrl-C
@@ -153,6 +162,8 @@ func armCodeDesc(code string, status int) string {
 }
 
 func init() {
+	rootCmd.SetVersionTemplate("azpim {{.Version}}\n")
+	rootCmd.SetHelpTemplate(rootCmd.HelpTemplate() + helpFooter)
 	cloudDefault := os.Getenv("AZURE_CLOUD")
 	if cloudDefault == "" {
 		cloudDefault = "public"

@@ -77,7 +77,7 @@ brews:
       bin.install "azpim"
       generate_completions_from_executable(bin/"azpim", "completion")
     test: |
-      system bin/"azpim", "version"
+      assert_match "azpim #{version}", shell_output("#{bin}/azpim --version")
 
 sboms:
   - artifacts: archive

@@ -177,7 +177,7 @@ if ($hash -eq $expected) { "OK" } else { "MISMATCH" }
 ### Verify installation
 
 ```bash
-azpim --version
+azpim --version   # prints e.g. "azpim 1.2.0"
 ```
 
 ### Uninstallation

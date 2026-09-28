@@ -11,7 +11,7 @@ var versionCmd = &cobra.Command{
 	Args:  cobra.NoArgs,
 	Short: "Print the azpim version",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println(cmd.Root().Version)
+		fmt.Fprintf(cmd.OutOrStdout(), "azpim %s\n", cmd.Root().Version) // same line as --version
 	},
 }
 
