@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	_ "github.com/Azure/azure-sdk-for-go/sdk/azcore/arm/runtime" // registers each cloud's Resource Manager audience
@@ -52,7 +53,12 @@ func NewCredential(cloudName string) (*Credential, error) {
 		return nil, err
 	}
 	cred, err := azidentity.NewDefaultAzureCredential(&azidentity.DefaultAzureCredentialOptions{
-		ClientOptions: azcore.ClientOptions{Cloud: c},
+		ClientOptions: azcore.ClientOptions{
+			Cloud: c,
+			// Cap each token request attempt, as pim.TryTimeout does for ARM calls.
+			// Signing in through az or azd has its own 10s limit.
+			Retry: policy.RetryOptions{TryTimeout: 30 * time.Second},
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Azure credential: %w\n\nTip: run 'az login' or 'azd auth login' first", err)

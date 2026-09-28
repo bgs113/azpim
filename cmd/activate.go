@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"cmp"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -68,34 +70,35 @@ Examples:
 			return err
 		}
 
-		scope, err := queryScope(ctx, clients, cred, activateScope)
-		if err != nil {
-			return err
-		}
-
 		var (
 			eligible []pim.EligibleAssignment
 			active   []pim.ActiveAssignment
 		)
-		err = listAt(ctx, clients, activateScope, scope, func(scope string) error {
-			g, gctx := errgroup.WithContext(ctx)
-			g.Go(func() error {
-				var err error
-				eligible, err = clients.ListEligible(gctx, scope)
-				if err != nil {
-					return fmt.Errorf("fetch eligible assignments: %w", err)
-				}
-				return nil
+		err = spin(ctx, "Fetching eligible assignments…", func(ctx context.Context) error {
+			scope, err := queryScope(ctx, clients, cred, activateScope)
+			if err != nil {
+				return err
+			}
+			return listAt(ctx, clients, activateScope, scope, func(scope string) error {
+				g, gctx := errgroup.WithContext(ctx)
+				g.Go(func() error {
+					var err error
+					eligible, err = clients.ListEligible(gctx, scope)
+					if err != nil {
+						return fmt.Errorf("fetch eligible assignments: %w", err)
+					}
+					return nil
+				})
+				g.Go(func() error {
+					var err error
+					active, err = clients.ListActive(gctx, scope, false)
+					if err != nil {
+						return fmt.Errorf("fetch active assignments: %w", err)
+					}
+					return nil
+				})
+				return g.Wait()
 			})
-			g.Go(func() error {
-				var err error
-				active, err = clients.ListActive(gctx, scope, false)
-				if err != nil {
-					return fmt.Errorf("fetch active assignments: %w", err)
-				}
-				return nil
-			})
-			return g.Wait()
 		})
 		if err != nil {
 			return err
@@ -111,7 +114,14 @@ Examples:
 			return err
 		}
 
-		maxDur, err := clients.FetchMaxActivationDuration(ctx, selected.Scope, selected.RoleDefID)
+		var maxDur time.Duration
+		err = spin(ctx, "Reading the role policy…", func(ctx context.Context) (err error) {
+			maxDur, err = clients.FetchMaxActivationDuration(ctx, selected.Scope, selected.RoleDefID)
+			return err
+		})
+		if errors.Is(err, errCancelled) {
+			return err
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not fetch policy maximum duration — no duration cap will be enforced\n")
 		}

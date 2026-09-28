@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -37,15 +38,16 @@ Scope examples:
 		}
 
 		ctx := cmd.Context()
-		scope, err := queryScope(ctx, clients, cred, requestsScope)
-		if err != nil {
-			return err
-		}
-
 		var requests []pim.ScheduleRequestEntry
-		err = listAt(ctx, clients, requestsScope, scope, func(scope string) (err error) {
-			requests, err = clients.ListRequests(ctx, scope)
-			return err
+		err = spin(ctx, "Fetching requests…", func(ctx context.Context) error {
+			scope, err := queryScope(ctx, clients, cred, requestsScope)
+			if err != nil {
+				return err
+			}
+			return listAt(ctx, clients, requestsScope, scope, func(scope string) (err error) {
+				requests, err = clients.ListRequests(ctx, scope)
+				return err
+			})
 		})
 		if err != nil {
 			return err

@@ -32,10 +32,26 @@ type Clients struct {
 	policyCache map[string]time.Duration
 }
 
+// TryTimeout caps each attempt of an Azure request. The SDK retries a timed-out
+// attempt 3 times, so a request Azure never answers fails after about two
+// minutes instead of hanging.
+const TryTimeout = 30 * time.Second
+
+// clientOptions returns the ARM client options for the given cloud.
+func clientOptions(c cloud.Configuration) arm.ClientOptions {
+	return arm.ClientOptions{ClientOptions: policy.ClientOptions{
+		Cloud: c,
+		Retry: policy.RetryOptions{TryTimeout: TryTimeout},
+	}}
+}
+
 // NewClients creates authorization clients for the given cloud. The SDK takes
 // no subscriptionID in constructors; scope-based routing is done per-call.
 func NewClients(cred azcore.TokenCredential, c cloud.Configuration) (*Clients, error) {
-	opts := arm.ClientOptions{ClientOptions: policy.ClientOptions{Cloud: c}}
+	return newClients(cred, clientOptions(c))
+}
+
+func newClients(cred azcore.TokenCredential, opts arm.ClientOptions) (*Clients, error) {
 
 	eligible, err := armauthorization.NewRoleEligibilityScheduleInstancesClient(cred, &opts)
 	if err != nil {

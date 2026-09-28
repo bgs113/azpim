@@ -3,6 +3,7 @@ module github.com/bgs113/azpim
 go 1.27.1
 
 require (
+	charm.land/bubbletea/v2 v2.0.10
 	charm.land/huh/v2 v2.0.3
 	charm.land/lipgloss/v2 v2.0.5
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.23.1
@@ -18,7 +19,6 @@ require (
 
 require (
 	charm.land/bubbles/v2 v2.2.1 // indirect
-	charm.land/bubbletea/v2 v2.0.10 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.8.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect

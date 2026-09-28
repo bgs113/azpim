@@ -11,12 +11,15 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"text/tabwriter"
 
 	"github.com/bgs113/azpim/internal/auth"
 	"github.com/bgs113/azpim/internal/pim"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
+	"charm.land/huh/v2/spinner"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
@@ -70,6 +73,13 @@ func Execute(version string) {
 // verbose Azure ARM API HTTP dumps are trimmed to just the error code.
 func friendlyError(err error) string {
 	msg := err.Error()
+
+	// A request that got no answer: each attempt hit pim.TryTimeout and the
+	// SDK's retries ran out. Checked first, since a stalled sign-in would
+	// otherwise read as an authentication failure.
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Sprintf("Azure didn't respond (each attempt timed out after %s, and retries ran out) — check your network connection and try again", pim.TryTimeout)
+	}
 
 	// Auth failures from the Azure SDK credential chain.
 	if strings.Contains(msg, "DefaultAzureCredential") {
@@ -416,16 +426,58 @@ func echoAnswer(title, answer string) {
 	}
 }
 
+// stderrIsTerminal is a variable so tests can pretend stderr is a terminal.
+var stderrIsTerminal = func() bool { return term.IsTerminal(os.Stderr.Fd()) }
+
+// spin runs fn, showing a spinner and title on stderr while it works. The
+// spinner is skipped, and fn simply run, unless stdin and stderr are both
+// terminals: it reads keys from stdin and draws on stderr. It's also skipped in
+// plain-prompt mode (screen readers) and on a dumb terminal. Ctrl-C returns
+// errCancelled.
+func spin(ctx context.Context, title string, fn func(context.Context) error) error {
+	if !stdinIsTerminal() || !stderrIsTerminal() || plainPrompts() || os.Getenv("TERM") == "dumb" {
+		return fn(ctx)
+	}
+	var done atomic.Bool
+	err := spinner.New().
+		Title(title).
+		Context(ctx).
+		WithOutput(os.Stderr).
+		ActionWithErr(func(ctx context.Context) error {
+			defer done.Store(true)
+			return fn(ctx)
+		}).
+		// Bubble Tea leaves the last frame on screen; blank it once fn is done.
+		WithViewHook(func(v tea.View) tea.View {
+			if done.Load() {
+				v.Content = ""
+			}
+			return v
+		}).
+		Run()
+	if errors.Is(err, tea.ErrInterrupted) {
+		return errCancelled
+	}
+	return err
+}
+
 // resolvePrincipal returns the caller's object ID for write commands and
 // prints, to stderr, the identity azpim is acting as. DefaultAzureCredential
 // prefers AZURE_CLIENT_ID/SECRET over az login, so a leftover service principal
 // secret would otherwise elevate silently as that principal.
 func resolvePrincipal(ctx context.Context, cred *auth.Credential) (string, error) {
-	principalID, err := auth.ResolvePrincipalID(ctx, cred)
+	var principalID, who string
+	err := spin(ctx, "Signing in…", func(ctx context.Context) (err error) {
+		if principalID, err = auth.ResolvePrincipalID(ctx, cred); err != nil {
+			return fmt.Errorf("resolve principal ID: %w", err)
+		}
+		who, _ = auth.ResolveIdentity(ctx, cred) // only for the "Acting as" line
+		return nil
+	})
 	if err != nil {
-		return "", fmt.Errorf("resolve principal ID: %w", err)
+		return "", err
 	}
-	if who, err := auth.ResolveIdentity(ctx, cred); err == nil {
+	if who != "" {
 		fmt.Fprintf(os.Stderr, "Acting as %s\n", who)
 	}
 	return principalID, nil

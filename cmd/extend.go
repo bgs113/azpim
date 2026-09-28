@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -51,15 +53,16 @@ Examples:
 			return err
 		}
 
-		scope, err := queryScope(ctx, clients, cred, extendScope)
-		if err != nil {
-			return err
-		}
-
 		var active []pim.ActiveAssignment
-		err = listAt(ctx, clients, extendScope, scope, func(scope string) (err error) {
-			active, err = clients.ListActive(ctx, scope, false)
-			return err
+		err = spin(ctx, "Fetching active assignments…", func(ctx context.Context) error {
+			scope, err := queryScope(ctx, clients, cred, extendScope)
+			if err != nil {
+				return err
+			}
+			return listAt(ctx, clients, extendScope, scope, func(scope string) (err error) {
+				active, err = clients.ListActive(ctx, scope, false)
+				return err
+			})
 		})
 		if err != nil {
 			return fmt.Errorf("fetch active assignments: %w", err)
@@ -73,7 +76,14 @@ Examples:
 			return err
 		}
 
-		maxDur, err := clients.FetchMaxActivationDuration(ctx, selected.Scope, selected.RoleDefID)
+		var maxDur time.Duration
+		err = spin(ctx, "Reading the role policy…", func(ctx context.Context) (err error) {
+			maxDur, err = clients.FetchMaxActivationDuration(ctx, selected.Scope, selected.RoleDefID)
+			return err
+		})
+		if errors.Is(err, errCancelled) {
+			return err
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not fetch policy maximum duration — no duration cap will be enforced\n")
 		}
