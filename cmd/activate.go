@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/bgs113/azpim/internal/pim"
 
-	"github.com/manifoldco/promptui"
+	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -138,6 +139,14 @@ Examples:
 			TicketSystem:  activateTicketSystem,
 		}
 
+		question := fmt.Sprintf("Activate %q at %q for %s?", selected.RoleName, selected.ScopeDisplay, pim.FormatDuration(dur))
+		if !start.IsZero() {
+			question = fmt.Sprintf("Schedule %q at %q for %s from %s?", selected.RoleName, selected.ScopeDisplay, pim.FormatDuration(dur), start.Format(startLayout))
+		}
+		if ok, err := confirmRequest(clients, question); !ok {
+			return err
+		}
+
 		if start.IsZero() {
 			fmt.Fprintf(os.Stderr, "Activating %q for %s...\n", selected.RoleName, pim.FormatDuration(dur))
 		} else {
@@ -185,30 +194,23 @@ func selectEligible(eligible []pim.EligibleAssignment, roleFlag string) (pim.Eli
 		if len(matches) == 1 {
 			return matches[0], nil
 		}
-		return pickByLabel(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag), eligibleLabel)
+		return pickByLabel(matches, fmt.Sprintf("Multiple %q assignments found — select scope", roleFlag), scopeNeed, eligibleLabel)
 	}
-	return pickByLabel(eligible, "Select eligible role to activate", eligibleLabel)
+	return pickByLabel(eligible, "Select eligible role to activate", "--role", eligibleLabel)
 }
 
 func eligibleLabel(a pim.EligibleAssignment) string {
-	return fmt.Sprintf("%-40s  %s", a.RoleName, a.ScopeDisplay)
+	return a.RoleName + "\t" + a.ScopeDisplay
 }
 
 // resolveDuration parses the --duration flag or prompts the user.
 // Accepts an integer (hours) or a Go duration string (e.g. 4h30m, 90m).
 func resolveDuration(flag string, maxDur time.Duration) (time.Duration, error) {
 	if flag != "" {
-		d, err := parseDurationInput(flag)
-		if err != nil {
-			return 0, fmt.Errorf("invalid duration %q: use integer hours (e.g. 4) or duration string (e.g. 4h30m, 90m)", flag)
+		if err := validateDuration(maxDur)(flag); err != nil {
+			return 0, fmt.Errorf("invalid duration %q: %w", flag, err)
 		}
-		if d <= 0 {
-			return 0, fmt.Errorf("duration must be positive")
-		}
-		if maxDur > 0 && d > maxDur {
-			return 0, fmt.Errorf("duration exceeds maximum allowed by policy (%s)", pim.FormatDuration(maxDur))
-		}
-		return d, nil
+		return parseDurationInput(flag)
 	}
 
 	defaultStr := "1h"
@@ -216,32 +218,41 @@ func resolveDuration(flag string, maxDur time.Duration) (time.Duration, error) {
 		defaultStr = pim.FormatDuration(maxDur)
 	}
 
-	prompt := promptui.Prompt{
-		Label:   fmt.Sprintf("Duration [%s]", defaultStr),
-		Default: defaultStr,
-		Validate: func(s string) error {
-			d, err := parseDurationInput(strings.TrimSpace(s))
-			if err != nil {
-				return fmt.Errorf("use integer hours (e.g. 4) or duration string (e.g. 4h30m, 90m)")
-			}
-			if d <= 0 {
-				return fmt.Errorf("duration must be positive")
-			}
-			if maxDur > 0 && d > maxDur {
-				return fmt.Errorf("exceeds maximum %s", pim.FormatDuration(maxDur))
-			}
-			return nil
-		},
+	val := defaultStr
+	// Blank means the default: huh's plain mode validates the raw line before
+	// substituting the default, and a cleared field should mean the same.
+	validate := func(s string) error {
+		return validateDuration(maxDur)(cmp.Or(strings.TrimSpace(s), defaultStr))
 	}
-	val, err := prompt.Run()
-	if err != nil {
-		return 0, fmt.Errorf("prompt cancelled")
+	in := huh.NewInput().Title(fmt.Sprintf("Duration [%s]", defaultStr)).Description("Hours (4) or a duration (4h30m, 90m)").Value(&val).Validate(validate)
+	if err := runPrompt(in, "--duration"); err != nil {
+		return 0, err
 	}
-	d, err := parseDurationInput(strings.TrimSpace(val))
+	val = cmp.Or(strings.TrimSpace(val), defaultStr)
+	d, err := parseDurationInput(val)
 	if err != nil {
 		return 0, fmt.Errorf("parse duration %q: %w", val, err)
 	}
+	echoAnswer("Duration", pim.FormatDuration(d))
 	return d, nil
+}
+
+// validateDuration checks a typed duration against the policy maximum
+// (maxDur 0 means no cap).
+func validateDuration(maxDur time.Duration) func(string) error {
+	return func(s string) error {
+		d, err := parseDurationInput(s)
+		if err != nil {
+			return fmt.Errorf("use integer hours (e.g. 4) or duration string (e.g. 4h30m, 90m)")
+		}
+		if d <= 0 {
+			return fmt.Errorf("duration must be positive")
+		}
+		if maxDur > 0 && d > maxDur {
+			return fmt.Errorf("exceeds the policy maximum of %s", pim.FormatDuration(maxDur))
+		}
+		return nil
+	}
 }
 
 // parseDurationInput accepts an integer (treated as hours) or a Go duration string.
@@ -292,17 +303,20 @@ func parseStart(s string, now time.Time) (time.Time, error) {
 
 // promptJustification prompts interactively for a non-empty justification string.
 func promptJustification() (string, error) {
-	for {
-		prompt := promptui.Prompt{Label: "Justification"}
-		val, err := prompt.Run()
-		if err != nil {
-			return "", fmt.Errorf("prompt cancelled")
-		}
-		if strings.TrimSpace(val) != "" {
-			return val, nil
-		}
-		fmt.Fprintln(os.Stderr, "  Justification is required")
+	var val string
+	in := huh.NewInput().Title("Justification").Value(&val).Validate(validateJustification)
+	if err := runPrompt(in, "--justification"); err != nil {
+		return "", err
 	}
+	echoAnswer("Justification", val)
+	return val, nil
+}
+
+func validateJustification(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return fmt.Errorf("justification is required")
+	}
+	return nil
 }
 
 type activateResult struct {

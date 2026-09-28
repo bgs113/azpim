@@ -130,3 +130,17 @@ func TestListAtNoLookup(t *testing.T) {
 		}
 	}
 }
+
+func TestAlignColumns(t *testing.T) {
+	got := alignColumns([]string{
+		"Azure Kubernetes Service RBAC Cluster Admin\tsub-prod",
+		"Reader\tTenant Root Group",
+	})
+	want := []string{
+		"Azure Kubernetes Service RBAC Cluster Admin  sub-prod",
+		"Reader                                       Tenant Root Group",
+	}
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("alignColumns =\n%q\nwant\n%q", got, want)
+	}
+}

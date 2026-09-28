@@ -261,7 +261,7 @@ docker run --rm -it \
   ghcr.io/bgs113/azpim:latest eligible
 ```
 
-> **Interactive prompts:** Commands that show interactive selection menus (e.g. `azpim activate` without `--role`) require a TTY, which `docker run -it` provides. Fully flag-specified commands work without `-t`.
+> **Interactive prompts:** Commands that show interactive selection menus (e.g. `azpim activate` without `--role`) require a TTY, which `docker run -it` provides. Without one, azpim exits with an error naming the missing flag instead of prompting. Fully flag-specified commands work without `-t`.
 
 ---
 
@@ -447,6 +447,8 @@ azpim activate \
 | `-o, --output table\|json`   | Output format (default: `table`)                                                                                      |
 
 The duration prompt defaults to the **maximum allowed by the role's management policy** and validates that the requested duration does not exceed it.
+
+In the role picker, press `/` to filter the list and Esc to clear the filter. Ctrl-C cancels any prompt and exits with status 130. If you answered any prompts, azpim shows what it's about to send and asks you to confirm it; runs driven entirely by flags don't ask. Prompts draw on stderr, so `-o json` output stays clean. Set `ACCESSIBLE=1` for plain line-based prompts that work with screen readers. When stdin isn't a terminal (CI, pipes), azpim doesn't prompt; it exits with an error naming the flag to pass.
 
 To prepare access for a maintenance window, schedule the activation with `--start`. Times without a UTC offset are read in your local timezone. `azpim requests` shows the request as `Scheduled` until it starts.
 
