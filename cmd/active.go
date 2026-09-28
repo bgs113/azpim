@@ -56,7 +56,7 @@ Scope examples:
 		case "json":
 			return output.PrintActiveJSON(os.Stdout, assignments, activeOutput.HumanReadable)
 		case "table":
-			output.PrintActiveTable(os.Stdout, assignments, activeOutput.HumanReadable)
+			output.PrintActiveTable(os.Stdout, os.Stderr, assignments, activeOutput.HumanReadable)
 			return nil
 		default:
 			return fmt.Errorf("unknown output format %q (use table or json)", activeOutput.Format)

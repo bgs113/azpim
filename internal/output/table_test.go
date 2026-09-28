@@ -50,11 +50,29 @@ func TestFormatTime(t *testing.T) {
 	})
 }
 
-func TestPrintEligibleTableEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	PrintEligibleTable(&buf, nil)
-	if !strings.Contains(buf.String(), "No eligible assignments found.") {
-		t.Errorf("expected empty message, got: %q", buf.String())
+// With nothing to show, the table printers write nothing to stdout, so a
+// pipeline sees empty output, and put the message on the message stream.
+func TestEmptyResultsGoToMessageStream(t *testing.T) {
+	activeOnly := []pim.ScheduleRequestEntry{{RoleName: "Contributor", RequestType: "Activate", Status: "Active"}}
+	tests := []struct {
+		name  string
+		print func(w, msg io.Writer)
+		want  string
+	}{
+		{"eligible", func(w, msg io.Writer) { PrintEligibleTable(w, msg, nil) }, "No eligible assignments found.\n"},
+		{"active", func(w, msg io.Writer) { PrintActiveTable(w, msg, nil, false) }, "No active assignments found.\n"},
+		{"requests", func(w, msg io.Writer) { PrintRequestsTable(w, msg, nil, false) }, "No requests found.\n"},
+		{"requests --pending", func(w, msg io.Writer) { PrintRequestsTable(w, msg, activeOnly, true) }, "No pending requests found.\n"},
+	}
+	for _, tt := range tests {
+		var out, msg bytes.Buffer
+		tt.print(&out, &msg)
+		if out.Len() != 0 {
+			t.Errorf("%s: wrote %q to stdout, want nothing", tt.name, out.String())
+		}
+		if msg.String() != tt.want {
+			t.Errorf("%s: message %q, want %q", tt.name, msg.String(), tt.want)
+		}
 	}
 }
 
@@ -68,37 +86,9 @@ func TestPrintEligibleTableRow(t *testing.T) {
 			MembershipType: "Direct",
 		},
 	}
-	PrintEligibleTable(&buf, assignments)
+	PrintEligibleTable(&buf, io.Discard, assignments)
 	if !strings.Contains(buf.String(), "Contributor") {
 		t.Errorf("expected role name in output, got: %q", buf.String())
-	}
-}
-
-func TestPrintActiveTableEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	PrintActiveTable(&buf, nil, false)
-	if !strings.Contains(buf.String(), "No active assignments found.") {
-		t.Errorf("expected empty message, got: %q", buf.String())
-	}
-}
-
-func TestPrintRequestsTableEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	PrintRequestsTable(&buf, nil, false)
-	if !strings.Contains(buf.String(), "No requests found.") {
-		t.Errorf("expected empty message, got: %q", buf.String())
-	}
-}
-
-func TestPrintRequestsTablePendingEmpty(t *testing.T) {
-	var buf bytes.Buffer
-	// One Active request; with pendingOnly=true, should show empty message.
-	requests := []pim.ScheduleRequestEntry{
-		{RoleName: "Contributor", ScopeDisplay: "My Sub", RequestType: "Activate", Status: "Active"},
-	}
-	PrintRequestsTable(&buf, requests, true)
-	if !strings.Contains(buf.String(), "No pending requests found.") {
-		t.Errorf("expected pending-empty message, got: %q", buf.String())
 	}
 }
 
@@ -113,7 +103,7 @@ func TestPrintRequestsTableRow(t *testing.T) {
 			Justification: "incident response",
 		},
 	}
-	PrintRequestsTable(&buf, requests, false)
+	PrintRequestsTable(&buf, io.Discard, requests, false)
 	out := buf.String()
 	if !strings.Contains(out, "Owner") {
 		t.Errorf("expected role name in output, got: %q", out)
@@ -129,7 +119,7 @@ func TestPrintRequestsTablePendingFilter(t *testing.T) {
 		{RoleName: "Owner", RequestType: "Activate", Status: "Pending"},
 		{RoleName: "Contributor", RequestType: "Activate", Status: "Active"},
 	}
-	PrintRequestsTable(&buf, requests, true)
+	PrintRequestsTable(&buf, io.Discard, requests, true)
 	out := buf.String()
 	if !strings.Contains(out, "Owner") {
 		t.Errorf("expected pending role in output, got: %q", out)
@@ -152,7 +142,7 @@ func TestPrintActiveTableRow(t *testing.T) {
 			EndTime:        time.Now().Add(4 * time.Hour),
 		},
 	}
-	PrintActiveTable(&buf, assignments, false)
+	PrintActiveTable(&buf, io.Discard, assignments, false)
 	if !strings.Contains(buf.String(), "Owner") {
 		t.Errorf("expected role name in output, got: %q", buf.String())
 	}
@@ -167,8 +157,8 @@ func sampleActive() []pim.ActiveAssignment {
 
 func TestTablesWithoutTerminalHaveNoEscapes(t *testing.T) {
 	var buf bytes.Buffer
-	PrintActiveTable(&buf, sampleActive(), false)
-	PrintRequestsTable(&buf, []pim.ScheduleRequestEntry{{RoleName: "Owner", Status: "Pending"}}, false)
+	PrintActiveTable(&buf, io.Discard, sampleActive(), false)
+	PrintRequestsTable(&buf, io.Discard, []pim.ScheduleRequestEntry{{RoleName: "Owner", Status: "Pending"}}, false)
 	if strings.Contains(buf.String(), "\x1b") {
 		t.Errorf("output written to a buffer contains ANSI escapes: %q", buf.String())
 	}
@@ -180,7 +170,7 @@ func TestTableColorsStateWhenColorIsOn(t *testing.T) {
 	t.Cleanup(func() { colorOutput = orig })
 
 	var buf bytes.Buffer
-	PrintActiveTable(&buf, sampleActive(), false)
+	PrintActiveTable(&buf, io.Discard, sampleActive(), false)
 	out := buf.String()
 	for _, want := range []string{"\x1b[32m", "\x1b[36m"} { // green Active, cyan Permanent
 		if !strings.Contains(out, want) {
@@ -193,7 +183,7 @@ func TestTableColorsStateWhenColorIsOn(t *testing.T) {
 // rows with accented and double-width characters.
 func TestTableColumnsAlign(t *testing.T) {
 	var buf bytes.Buffer
-	PrintActiveTable(&buf, sampleActive(), false)
+	PrintActiveTable(&buf, io.Discard, sampleActive(), false)
 	lines := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	seps := func(line string) []int {
 		var at []int
@@ -219,7 +209,7 @@ func TestTableColumnsAlign(t *testing.T) {
 
 func TestActiveTableRightAlignsTimeRemaining(t *testing.T) {
 	var buf bytes.Buffer
-	PrintActiveTable(&buf, sampleActive(), true)
+	PrintActiveTable(&buf, io.Discard, sampleActive(), true)
 	for _, l := range strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")[2:] {
 		last := l[strings.LastIndex(l, "│")+len("│"):]
 		if !strings.HasPrefix(last, "  ") || !strings.HasSuffix(last, " ") || strings.HasSuffix(last, "  ") {
@@ -238,7 +228,7 @@ func TestTableWrapsOnlyInNarrowTerminal(t *testing.T) {
 	render := func(width int) []string {
 		termWidth = func(io.Writer) int { return width }
 		var buf bytes.Buffer
-		PrintEligibleTable(&buf, rows)
+		PrintEligibleTable(&buf, io.Discard, rows)
 		return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 	}
 
