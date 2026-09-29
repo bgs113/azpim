@@ -20,7 +20,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 	"charm.land/huh/v2/spinner"
+	"charm.land/lipgloss/v2"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	catppuccin "github.com/catppuccin/go"
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 )
@@ -453,6 +455,7 @@ func spin(ctx context.Context, title string, fn func(context.Context) error) err
 	err := spinner.New().
 		Title(title).
 		Context(ctx).
+		WithTheme(spinner.ThemeFunc(spinnerCatppuccin)).
 		WithOutput(os.Stderr).
 		ActionWithErr(func(ctx context.Context) error {
 			defer done.Store(true)
@@ -470,6 +473,21 @@ func spin(ctx context.Context, title string, fn func(context.Context) error) err
 		return errCancelled
 	}
 	return err
+}
+
+// spinnerCatppuccin styles the spinner to match the Catppuccin prompts:
+// Latte on light terminals, Mocha on dark. Per Catppuccin's style guide the
+// title is body text (Text); the spinner takes Mauve, the accent huh's
+// Catppuccin theme uses for prompt titles.
+func spinnerCatppuccin(isDark bool) *spinner.Styles {
+	flavour := catppuccin.Latte
+	if isDark {
+		flavour = catppuccin.Mocha
+	}
+	return &spinner.Styles{
+		Spinner: lipgloss.NewStyle().Foreground(flavour.Mauve()),
+		Title:   lipgloss.NewStyle().Foreground(flavour.Text()),
+	}
 }
 
 // resolvePrincipal returns the caller's object ID for write commands and
