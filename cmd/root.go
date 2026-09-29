@@ -137,7 +137,7 @@ func outcomeLine(o pim.RequestOutcome, action, role, done string) string {
 }
 
 // armCodeDesc maps known ARM error codes to short descriptions,
-// falling back to "{code} (HTTP {status})" for unrecognised codes.
+// falling back to "{code} (HTTP {status})" for unrecognized codes.
 func armCodeDesc(code string, status int) string {
 	switch code {
 	case "RoleAssignmentExists", "RoleAssignmentAlreadyExists":
@@ -480,13 +480,13 @@ func spin(ctx context.Context, title string, fn func(context.Context) error) err
 // title is body text (Text); the spinner takes Mauve, the accent huh's
 // Catppuccin theme uses for prompt titles.
 func spinnerCatppuccin(isDark bool) *spinner.Styles {
-	flavour := catppuccin.Latte
+	flavor := catppuccin.Latte
 	if isDark {
-		flavour = catppuccin.Mocha
+		flavor = catppuccin.Mocha
 	}
 	return &spinner.Styles{
-		Spinner: lipgloss.NewStyle().Foreground(flavour.Mauve()),
-		Title:   lipgloss.NewStyle().Foreground(flavour.Text()),
+		Spinner: lipgloss.NewStyle().Foreground(flavor.Mauve()),
+		Title:   lipgloss.NewStyle().Foreground(flavor.Text()),
 	}
 }
 
