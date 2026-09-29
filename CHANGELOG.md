@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The spinner now uses Catppuccin colours to match the prompts (Latte on light terminals, Mocha on dark) instead of huh's default pink.
+
 ## [1.2.0] - 2026-09-28
 
 ### Added
