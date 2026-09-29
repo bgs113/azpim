@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-29
+
 ### Changed
 - The spinner now uses Catppuccin colours to match the prompts (Latte on light terminals, Mocha on dark) instead of huh's default pink.
 
@@ -119,7 +121,8 @@ First public release.
 - Sign release binaries and container images with Cosign; publish SBOMs.
 - Add MIT license.
 
-[Unreleased]: https://github.com/bgs113/azpim/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/bgs113/azpim/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/bgs113/azpim/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bgs113/azpim/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bgs113/azpim/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bgs113/azpim/compare/v1.1.0...v1.1.1
