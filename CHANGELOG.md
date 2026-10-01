@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Prompts on dark terminals now use Catppuccin Mocha, matching the spinner. Before, they always used the light Latte flavor because huh never checked the terminal's background color.
+
 ## [1.2.1] - 2026-09-29
 
 ### Changed
