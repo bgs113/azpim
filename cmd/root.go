@@ -380,8 +380,11 @@ func runPrompt(field huh.Field, need string) error {
 	if !stdinIsTerminal() {
 		return fmt.Errorf("%s is required when not running in a terminal", need)
 	}
+	// huh's form never asks the terminal for its background color, so fields
+	// would always get Latte. Ask once ourselves; true (Mocha) if it can't tell.
+	dark := lipgloss.HasDarkBackground(os.Stdin, os.Stderr)
 	err := huh.NewForm(huh.NewGroup(field)).
-		WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).
+		WithTheme(huh.ThemeFunc(func(bool) *huh.Styles { return huh.ThemeCatppuccin(dark) })).
 		WithOutput(os.Stderr).
 		WithAccessible(plainPrompts()).
 		Run()
