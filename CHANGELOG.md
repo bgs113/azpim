@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-09-30
+
 ### Fixed
 - Prompts on dark terminals now use Catppuccin Mocha, matching the spinner. Before, they always used the light Latte flavor because huh never checked the terminal's background color.
 
@@ -124,7 +126,8 @@ First public release.
 - Sign release binaries and container images with Cosign; publish SBOMs.
 - Add MIT license.
 
-[Unreleased]: https://github.com/bgs113/azpim/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/bgs113/azpim/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/bgs113/azpim/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bgs113/azpim/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bgs113/azpim/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bgs113/azpim/compare/v1.1.1...v1.1.2
