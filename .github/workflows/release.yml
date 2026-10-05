@@ -32,11 +32,12 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.ref }}
+          persist-credentials: false
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          cache: false # a poisoned cache from another workflow could end up in signed release artifacts
 
       - uses: anchore/sbom-action/download-syft@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
 
