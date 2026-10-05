@@ -64,14 +64,20 @@ jobs:
             echo "::warning::No CHANGELOG.md entry found for $TAG"
           fi
 
-      # GoReleaser is pinned in tools/goreleaser/go.mod, which Dependabot updates.
-      - name: Release
+      # Run the official GoReleaser binary at the version pinned in
+      # tools/goreleaser/go.mod, which Dependabot updates.
+      - name: Read GoReleaser version
+        id: goreleaser
         run: |
-          args=(release --clean --release-notes="$RUNNER_TEMP/release-notes.md")
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
-            args+=(--skip=validate)
-          fi
-          go tool -modfile=tools/goreleaser/go.mod goreleaser "${args[@]}"
+          version=$(go mod edit -json tools/goreleaser/go.mod |
+            jq -r '.Require[] | select(.Path == "github.com/goreleaser/goreleaser/v2") | .Version')
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          version: ${{ steps.goreleaser.outputs.version }}
+          args: release --clean --release-notes=${{ runner.temp }}/release-notes.md${{ github.event_name == 'workflow_dispatch' && ' --skip=validate' || '' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ env.TAG }}
