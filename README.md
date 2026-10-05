@@ -287,6 +287,14 @@ make install
 go test ./...
 ```
 
+**Run the linters and vulnerability scan:**
+
+```bash
+make check   # golangci-lint, actionlint and govulncheck, as CI runs them
+```
+
+Dev and release tools (golangci-lint, actionlint, govulncheck, GoReleaser) are pinned in `tools/<name>/go.mod` and run with `go tool`, so there's nothing to install beyond Go. Dependabot keeps them updated.
+
 **Test a local release build without publishing:**
 
 ```bash

@@ -16,31 +16,54 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/*/go.sum
 
       - name: Test
         run: go test -mod=readonly ./...
 
+      # Tool versions are pinned in tools/*/go.mod, which Dependabot updates.
       - name: Vulnerability scan
-        run: |
-          go install golang.org/x/vuln/cmd/govulncheck@v1.7.0
-          govulncheck ./...
-
-      - name: Lint workflows
-        run: |
-          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          actionlint
+        run: go tool -modfile=tools/govulncheck/go.mod govulncheck ./...
 
       - name: Lint
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
-        with:
-          version: latest
+        run: go tool -modfile=tools/golangci-lint/go.mod golangci-lint run ./...
 
       - name: Secret scan
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint-workflows:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload zizmor's SARIF to code scanning
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: |
+            go.sum
+            tools/*/go.sum
+
+      # The runner has shellcheck installed, so run: scripts are checked too.
+      - name: Lint workflows
+        run: go tool -modfile=tools/actionlint/go.mod actionlint -color
+
+      - name: Audit workflows
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
+        with:
+          version: 1.30.1
