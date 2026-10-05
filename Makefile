@@ -1,8 +1,9 @@
 VERSION  ?= $(shell git -C . describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS  := -s -w -X main.version=$(VERSION)
+TOOL      = go tool -modfile=tools/$(1)/go.mod $(1)
 DIST     := dist
 
-.PHONY: build release snapshot install uninstall clean tools lint vuln check docker-build docker-run
+.PHONY: build release snapshot install uninstall clean lint actionlint vuln check docker-build docker-run
 
 ## build: build for the current platform
 build:
@@ -10,11 +11,11 @@ build:
 
 ## release: build and publish a release via GoReleaser (requires a tagged commit)
 release:
-	goreleaser release --clean
+	$(call TOOL,goreleaser) release --clean
 
 ## snapshot: build release artifacts locally without publishing (for testing)
 snapshot:
-	goreleaser release --snapshot --clean
+	$(call TOOL,goreleaser) release --snapshot --clean
 
 ## install: install the current-platform binary to ~/.local/bin (no sudo needed)
 install: build
@@ -29,20 +30,20 @@ uninstall:
 	rm -f $(HOME)/.local/bin/azpim
 	@echo "Removed $(HOME)/.local/bin/azpim"
 
-## tools: install go-based quality tools (golangci-lint managed via mise)
-tools:
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-
 ## lint: run golangci-lint
 lint:
-	golangci-lint run ./...
+	$(call TOOL,golangci-lint) run ./...
 
 ## vuln: scan dependencies for known vulnerabilities
 vuln:
-	govulncheck ./...
+	$(call TOOL,govulncheck) ./...
+
+## actionlint: lint GitHub Actions workflows
+actionlint:
+	$(call TOOL,actionlint)
 
 ## check: run all quality and security checks
-check: lint vuln
+check: lint actionlint vuln
 
 ## docker-build: build the container image (uses Chainguard hardened base images)
 docker-build:

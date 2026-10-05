@@ -20,6 +20,20 @@ updates:
       # newer Lip Gloss.
       - dependency-name: "charm.land/lipgloss/v2"
         versions: ["2.0.6"]
+  # Dev and release tools run with `go tool -modfile=tools/<name>/go.mod`.
+  # One module per tool, so no tool's dependencies change another's.
+  - package-ecosystem: "gomod"
+    directories:
+      - "/tools/*"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7 # let a new release age a week before proposing it; security updates are not delayed
+    groups:
+      tools:
+        update-types:
+          - "minor"
+          - "patch"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
