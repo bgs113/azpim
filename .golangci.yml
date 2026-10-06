@@ -22,12 +22,32 @@ linters:
         - G304  # file path from variable (intentional: cache/config reads)
 
     revive:
+      # A rules list replaces revive's defaults, so this spells out revive's
+      # recommended set: https://github.com/revive-lint/revive#recommended-configuration
+      # Left out: exported (CLI tool, not a library) and unused-parameter
+      # (cobra RunE signature requires args []string).
       rules:
-        - name: exported
-          disabled: true       # CLI tool, not a library
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: increment-decrement
+        - name: var-naming
+        - name: var-declaration
         - name: package-comments # godoc/pkg.go.dev summaries (#35)
-        - name: unused-parameter
-          disabled: true       # cobra RunE signature requires args []string
+        - name: range
+        - name: receiver-naming
+        - name: time-naming
+        - name: unexported-return
+        - name: indent-error-flow
+        - name: errorf
+        - name: empty-block
+        - name: superfluous-else
+        - name: unreachable-code
+        - name: redefines-builtin-id
 
     errcheck:
       exclude-functions:

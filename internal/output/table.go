@@ -62,9 +62,9 @@ func writeTable(w io.Writer, cols []column, rows [][]string) {
 	}
 	// In a terminal, fit the columns to its width; cells wrap within them.
 	var widths []int
-	if max := termWidth(w); max > 0 {
+	if tw := termWidth(w); tw > 0 {
 		natural, floors := cellWidths(headers, rows)
-		widths = fitWidths(natural, floors, max-(len(cols)-1)) // - the │ separators
+		widths = fitWidths(natural, floors, tw-(len(cols)-1)) // - the │ separators
 	}
 	t := table.New().
 		Border(lipgloss.NormalBorder()).
@@ -103,7 +103,7 @@ func cellWidths(headers []string, rows [][]string) (widths, floors []int) {
 	for _, row := range rows {
 		for i, cell := range row {
 			widths[i] = max(widths[i], ansi.StringWidth(cell)+2)
-			for _, word := range strings.Fields(cell) {
+			for word := range strings.FieldsSeq(cell) {
 				floors[i] = max(floors[i], ansi.StringWidth(word)+2)
 			}
 		}
