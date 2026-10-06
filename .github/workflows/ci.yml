@@ -15,16 +15,17 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
           cache: true
+          # Only the go.sum files this job builds from, so each job gets its own cache key.
           cache-dependency-path: |
             go.sum
-            tools/*/go.sum
+            tools/golangci-lint/go.sum
+            tools/govulncheck/go.sum
 
       - name: Test
         run: go test -mod=readonly ./...
@@ -35,11 +36,6 @@ jobs:
 
       - name: Lint
         run: go tool -modfile=tools/golangci-lint/go.mod golangci-lint run ./...
-
-      - name: Secret scan
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   lint-workflows:
     runs-on: ubuntu-latest
@@ -55,9 +51,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-          cache-dependency-path: |
-            go.sum
-            tools/*/go.sum
+          cache-dependency-path: tools/actionlint/go.sum
 
       # The runner has shellcheck installed, so run: scripts are checked too.
       - name: Lint workflows

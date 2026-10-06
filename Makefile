@@ -3,15 +3,11 @@ LDFLAGS  := -s -w -X main.version=$(VERSION)
 TOOL      = go tool -modfile=tools/$(1)/go.mod $(1)
 DIST     := dist
 
-.PHONY: build release snapshot install uninstall clean lint actionlint vuln check docker-build docker-run
+.PHONY: build snapshot install uninstall clean lint actionlint vuln check docker-build docker-run
 
 ## build: build for the current platform
 build:
 	go build -ldflags "$(LDFLAGS)" -o azpim .
-
-## release: build and publish a release via GoReleaser (requires a tagged commit)
-release:
-	$(call TOOL,goreleaser) release --clean
 
 ## snapshot: build release artifacts locally without publishing (for testing)
 snapshot:
