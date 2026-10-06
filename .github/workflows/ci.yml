@@ -22,9 +22,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+          # Only the go.sum files this job builds from, so each job gets its own cache key.
           cache-dependency-path: |
             go.sum
-            tools/*/go.sum
+            tools/golangci-lint/go.sum
+            tools/govulncheck/go.sum
 
       - name: Test
         run: go test -mod=readonly ./...
@@ -55,9 +57,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-          cache-dependency-path: |
-            go.sum
-            tools/*/go.sum
+          cache-dependency-path: tools/actionlint/go.sum
 
       # The runner has shellcheck installed, so run: scripts are checked too.
       - name: Lint workflows
