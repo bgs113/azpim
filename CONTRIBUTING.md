@@ -27,7 +27,7 @@ Open an issue describing the use case before writing code — for anything beyon
    make build
    ```
 5. If the change is user-facing (Added/Changed/Fixed/Removed/Security), add an entry under `## [Unreleased]` in `CHANGELOG.md` — see [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-6. Open a pull request. CI must pass: tests, `golangci-lint`, `govulncheck`, `gitleaks`, and CodeQL all run on every PR.
+6. Open a pull request. CI must pass: tests, `golangci-lint`, `govulncheck`, actionlint, zizmor and CodeQL all run on every PR.
 
 ## Commit messages
 
