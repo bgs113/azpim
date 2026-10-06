@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2026-10-05
+
+### Changed
+- Bump `github.com/Azure/azure-sdk-for-go/sdk/azcore` to v1.23.2, which fixes parsing RFC 7231 dates to always use the GMT zone.
+- Release builds use the GoReleaser version pinned in `tools/goreleaser/go.mod`, which Dependabot keeps current, instead of whichever v2 release was newest at release time. golangci-lint, govulncheck and actionlint are pinned the same way, each in its own module under `tools/`, and run with `go tool`.
+- CI audits the GitHub Actions workflows with [zizmor](https://docs.zizmor.sh/), and its findings appear in code scanning.
+
+### Removed
+- `make release`. Releases run only in CI, which signs and attests them. `make snapshot` still builds release artifacts locally.
+- gitleaks from CI. GitHub secret scanning and push protection cover it.
+
+### Security
+- Workflow checkouts no longer save the GitHub token in the git config, and release builds no longer restore the Go build cache, so a poisoned cache can't reach signed release artifacts. zizmor found both.
+
 ## [1.2.2] - 2026-09-30
 
 ### Fixed
@@ -126,7 +140,8 @@ First public release.
 - Sign release binaries and container images with Cosign; publish SBOMs.
 - Add MIT license.
 
-[Unreleased]: https://github.com/bgs113/azpim/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/bgs113/azpim/compare/v1.2.3...HEAD
+[1.2.3]: https://github.com/bgs113/azpim/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bgs113/azpim/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bgs113/azpim/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bgs113/azpim/compare/v1.1.2...v1.2.0
