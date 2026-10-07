@@ -29,8 +29,16 @@ include them (they appear with "Permanent" in the Time remaining column).
 Scope examples:
   azpim active                                                      # whole tenant, one query
   azpim active --subscription 00000000-0000-0000-0000-000000000000
-  azpim active --management-group myMG --include-permanent`,
+  azpim active --management-group myMG --include-permanent
+
+Sort examples (default: by role, then resource):
+  azpim active --sort remaining                                     # expiring soonest first
+  azpim active --sort resource,remaining:desc`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		terms, err := activeSort.parse(activeOutput.Sort, "active")
+		if err != nil {
+			return err
+		}
 		cred, clients, err := connect()
 		if err != nil {
 			return err
@@ -52,6 +60,7 @@ Scope examples:
 			return err
 		}
 
+		activeSort.sort(assignments, terms, activeOutput.Reverse)
 		switch activeOutput.Format {
 		case "json":
 			return output.PrintActiveJSON(os.Stdout, assignments, activeOutput.HumanReadable)
@@ -67,6 +76,7 @@ Scope examples:
 func init() {
 	addScopeFlags(activeCmd, &activeScope)
 	addOutputFlags(activeCmd, &activeOutput)
+	addSortFlags(activeCmd, &activeOutput, activeSort)
 	activeCmd.Flags().BoolVar(&activeOutput.HumanReadable, "human", false, `Use human-readable time remaining format (e.g. "1h 32m 5s")`)
 	activeCmd.Flags().BoolVar(&activeIncludePermanent, "include-permanent", false, "Include permanently-assigned roles (not shown by default)")
 }

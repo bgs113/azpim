@@ -111,6 +111,7 @@ activated; roles already active are skipped. See the README for the format.`,
 			return err
 		}
 		eligible = pim.FilterEligibleActive(eligible, active)
+		eligibleSort.sort(eligible, nil, false)
 
 		if len(eligible) == 0 {
 			return fmt.Errorf("no eligible assignments available to activate (all may already be active)")

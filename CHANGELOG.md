@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `azpim activate --preset <name>` activates a named set of roles at once, read from `presets.toml` in azpim's config directory. azpim looks up every role before activating any, skips roles that are already active, and prints one row per role. See [Presets](README.md#presets).
+- `--sort` and `--reverse` on `eligible`, `active` and `requests`. `--sort` takes one or more columns, comma-separated, each optionally followed by `:desc`, e.g. `azpim requests --sort status,requested:desc`. An unknown key suggests the closest valid one, and shell completion suggests the keys.
+
+### Changed
+- `eligible`, `active` and `requests` are sorted by default, so rows no longer come out in a different order from one run to the next. `eligible` sorts by role then scope, `active` by role then resource, and `requests` newest first. Both table and JSON output use the same order. The role pickers in `activate`, `deactivate` and `extend` use the same order.
 
 ## [1.2.3] - 2026-10-05
 

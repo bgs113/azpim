@@ -66,6 +66,7 @@ Examples:
 		if len(active) == 0 {
 			return fmt.Errorf("no active (time-bound) assignments found")
 		}
+		activeSort.sort(active, nil, false)
 
 		if deactivateAll {
 			fmt.Fprintln(os.Stderr, "Active roles to be deactivated:")
