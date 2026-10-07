@@ -22,6 +22,7 @@ var (
 	activateCheck         checkFlags
 	activateScope         scopeFlags
 	activateRole          string
+	activatePreset        string
 	activateDuration      string
 	activateStart         string
 	activateJustification string
@@ -49,8 +50,26 @@ Examples:
   azpim activate                                                              # interactive, all scopes
   azpim activate --subscription <id> --role "Contributor" --duration 2h --justification "incident response"
   azpim activate --role "Contributor" -d 2h -j "test" --validate-only        # check against the role policy only
-  azpim activate --subscription Prod --role Owner --start 22:00 -d 4h -j "CHG-5678"`,
+  azpim activate --subscription Prod --role Owner --start 22:00 -d 4h -j "CHG-5678"
+  azpim activate --preset prod-oncall -j "INC-1234"                          # every role in a preset
+
+Presets: --preset activates a named set of roles from presets.toml in azpim's
+config directory: $XDG_CONFIG_HOME/azpim, or ~/.config/azpim when it's unset
+(%AppData%\azpim on Windows). All roles are looked up before any is
+activated; roles already active are skipped. See the README for the format.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Read the preset first, so a mistake in the file fails before signing in.
+		var p preset
+		if activatePreset != "" {
+			path, err := presetsPath()
+			if err != nil {
+				return err
+			}
+			if p, err = loadPreset(path, activatePreset); err != nil {
+				return err
+			}
+		}
+
 		cred, clients, err := connect()
 		if err != nil {
 			return err
@@ -70,6 +89,10 @@ Examples:
 			return err
 		}
 
+		if activatePreset != "" {
+			return runPreset(ctx, cred, clients, principalID, activatePreset, p, start)
+		}
+
 		var (
 			eligible []pim.EligibleAssignment
 			active   []pim.ActiveAssignment
@@ -79,25 +102,9 @@ Examples:
 			if err != nil {
 				return err
 			}
-			return listAt(ctx, clients, activateScope, scope, func(scope string) error {
-				g, gctx := errgroup.WithContext(ctx)
-				g.Go(func() error {
-					var err error
-					eligible, err = clients.ListEligible(gctx, scope)
-					if err != nil {
-						return fmt.Errorf("fetch eligible assignments: %w", err)
-					}
-					return nil
-				})
-				g.Go(func() error {
-					var err error
-					active, err = clients.ListActive(gctx, scope, false)
-					if err != nil {
-						return fmt.Errorf("fetch active assignments: %w", err)
-					}
-					return nil
-				})
-				return g.Wait()
+			return listAt(ctx, clients, activateScope, scope, func(scope string) (err error) {
+				eligible, active, err = fetchAssignments(ctx, clients, scope)
+				return err
 			})
 		})
 		if err != nil {
@@ -186,6 +193,10 @@ func init() {
 	addScopeFlags(activateCmd, &activateScope)
 	addCheckFlags(activateCmd, &activateCheck)
 	activateCmd.Flags().StringVar(&activateRole, "role", "", "Role name to activate (interactive if omitted)")
+	activateCmd.Flags().StringVar(&activatePreset, "preset", "", "Activate every role in this preset from presets.toml")
+	for _, f := range []string{"role", "scope", "management-group", "subscription", "resource-group"} {
+		activateCmd.MarkFlagsMutuallyExclusive("preset", f)
+	}
 	activateCmd.Flags().StringVarP(&activateDuration, "duration", "d", "", "Activation duration, e.g. 4 or 4h or 4h30m (prompts if omitted)")
 	activateCmd.Flags().StringVar(&activateStart, "start", "", "Start the activation later: 22:00, 2026-10-01T22:00 (local time) or RFC 3339")
 	activateCmd.Flags().StringVarP(&activateJustification, "justification", "j", "", "Justification text (prompts if omitted)")
@@ -342,12 +353,18 @@ type activateResult struct {
 	ExpiresAt       string `json:"expires_at,omitempty"`
 	Status          string `json:"status"`
 	AzureStatus     string `json:"azure_status"`
+	Error           string `json:"error,omitempty"`
 }
 
 // printActivateJSON writes the result. activated_at and expires_at are only
 // set once Azure confirms the activation took effect or, for a scheduled
 // activation (start is non-zero), is scheduled; they then count from start.
 func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now, start time.Time, o pim.RequestOutcome) error {
+	return writeJSON(w, newActivateResult(roleName, roleDefID, scope, scopeDisplay, dur, now, start, o))
+}
+
+// newActivateResult builds the result printActivateJSON writes.
+func newActivateResult(roleName, roleDefID, scope, scopeDisplay string, dur time.Duration, now, start time.Time, o pim.RequestOutcome) activateResult {
 	r := activateResult{
 		RoleName:        roleName,
 		RoleDefID:       roleDefID,
@@ -367,5 +384,24 @@ func printActivateJSON(w io.Writer, roleName, roleDefID, scope, scopeDisplay str
 		r.ActivatedAt = r.RequestedAt
 		r.ExpiresAt = now.Add(dur).UTC().Format(time.RFC3339)
 	}
-	return writeJSON(w, r)
+	return r
+}
+
+// fetchAssignments lists the eligible and active assignments at scope at the same time.
+func fetchAssignments(ctx context.Context, clients *pim.Clients, scope string) (eligible []pim.EligibleAssignment, active []pim.ActiveAssignment, err error) {
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() (err error) {
+		if eligible, err = clients.ListEligible(gctx, scope); err != nil {
+			return fmt.Errorf("fetch eligible assignments: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() (err error) {
+		if active, err = clients.ListActive(gctx, scope, false); err != nil {
+			return fmt.Errorf("fetch active assignments: %w", err)
+		}
+		return nil
+	})
+	err = g.Wait()
+	return eligible, active, err
 }
