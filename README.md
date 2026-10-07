@@ -454,6 +454,7 @@ azpim activate \
 
 | Flag                         | Description                                                                                                           |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `--preset <name>`            | Activate every role in a [preset](#presets) |
 | `--role <name>`              | Role name to activate (interactive list if omitted; prompts for scope if the name matches multiple entries)           |
 | `-d, --duration <value>`     | Duration as integer hours (`4`), or duration string (`4h30m`, `90m`) — prompts if omitted; defaults to policy maximum |
 | `--start <time>`             | Schedule the activation to start later: `22:00` (today, or tomorrow if past), `2026-10-01T22:00` (local time), or RFC 3339 |
@@ -472,6 +473,41 @@ To prepare access for a maintenance window, schedule the activation with `--star
 azpim activate --subscription Prod --role Owner --start "2026-10-01T22:00" -d 4h -j "CHG-5678"
 azpim activate --subscription Prod --role Owner --start 22:00 -d 4h -j "CHG-5678"
 ```
+
+#### Presets
+
+A preset activates a named set of roles with one command:
+
+```bash
+azpim activate --preset prod-oncall -j "INC-1234"
+```
+
+Define presets in `presets.toml` in azpim's config directory: `$XDG_CONFIG_HOME/azpim/`, or `~/.config/azpim/` when `XDG_CONFIG_HOME` is unset (`%AppData%\azpim\` on Windows). Each preset is a table. Each `at` entry gives one scope (exactly one of `subscription`, `management-group` or `scope`, plus `resource-group` with `subscription`) and the roles to activate there:
+
+```toml
+# Comments are allowed.
+[prod-oncall]
+duration = "4h"   # optional; capped at each role's policy maximum
+
+[[prod-oncall.at]]
+subscription = "Prod"
+roles = ["Contributor", "Reader"]
+
+[[prod-oncall.at]]
+scope = "/subscriptions/<id>/resourceGroups/<rg>/providers/Microsoft.KeyVault/vaults/kv-prod"
+roles = ["Key Vault Secrets Officer"]
+
+[staging]
+at = [
+  { subscription = "Staging", resource-group = "app-rg", roles = ["Contributor"] },
+  { management-group = "Non-production", roles = ["Reader"] },
+]
+```
+
+- azpim looks up every role before it activates any. If a role isn't eligible or a scope can't be found, it lists every problem and activates nothing.
+- Roles that are already active are skipped. The rest are activated in parallel, and azpim prints one row per role (`-o json` gives one object per role). If any role fails, azpim exits non-zero.
+- `--duration` overrides the preset's `duration`. Without either, each role gets its policy maximum. `--justification`, `--ticket-number`, `--ticket-system`, `--start`, `--dry-run` and `--validate-only` apply to every role.
+- `--preset` can't be combined with `--role` or the scope flags. Unknown keys in the file are an error, so a typo such as `subscripton` is reported instead of ignored.
 
 ---
 

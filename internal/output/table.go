@@ -244,6 +244,14 @@ func PrintRequestsTable(w, msg io.Writer, requests []pim.ScheduleRequestEntry, p
 	}, rows)
 }
 
+// PrintActivationsTable writes one row per role of a multi-role activation.
+// Each row is role, scope, duration, status and, for a failure, the error.
+func PrintActivationsTable(w io.Writer, rows [][]string) {
+	writeTable(w, []column{
+		{header: "ROLE"}, {header: "SCOPE"}, {header: "DURATION"}, {header: "STATUS", color: requestStatusColor}, {header: "ERROR"},
+	}, rows)
+}
+
 // orDash returns s, or "-" when s is empty.
 func orDash(s string) string {
 	if s == "" {

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `azpim activate --preset <name>` activates a named set of roles at once, read from `presets.toml` in azpim's config directory. azpim looks up every role before activating any, skips roles that are already active, and prints one row per role. See [Presets](README.md#presets).
+
 ## [1.2.3] - 2026-10-05
 
 ### Changed
