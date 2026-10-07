@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-07
+
 ### Added
 - `azpim activate --preset <name>` activates a named set of roles at once, read from `presets.toml` in azpim's config directory. azpim looks up every role before activating any, skips roles that are already active, and prints one row per role. See [Presets](README.md#presets).
 - `--sort` and `--reverse` on `eligible`, `active` and `requests`. `--sort` takes one or more columns, comma-separated, each optionally followed by `:desc`, e.g. `azpim requests --sort status,requested:desc`. An unknown key suggests the closest valid one, and shell completion suggests the keys.
@@ -147,7 +149,8 @@ First public release.
 - Sign release binaries and container images with Cosign; publish SBOMs.
 - Add MIT license.
 
-[Unreleased]: https://github.com/bgs113/azpim/compare/v1.2.3...HEAD
+[Unreleased]: https://github.com/bgs113/azpim/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/bgs113/azpim/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/bgs113/azpim/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bgs113/azpim/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bgs113/azpim/compare/v1.2.0...v1.2.1
