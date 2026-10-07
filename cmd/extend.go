@@ -70,6 +70,7 @@ Examples:
 		if len(active) == 0 {
 			return fmt.Errorf("no active (time-bound) assignments found to extend")
 		}
+		activeSort.sort(active, nil, false)
 
 		selected, err := selectActive(active, extendRole, "extend")
 		if err != nil {

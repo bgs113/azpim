@@ -27,8 +27,16 @@ Scope examples:
   azpim eligible --subscription 00000000-0000-0000-0000-000000000000
   azpim eligible --management-group myMG
   azpim eligible --management-group /
-  azpim eligible --subscription <id> --resource-group myRG`,
+  azpim eligible --subscription <id> --resource-group myRG
+
+Sort examples (default: by role, then scope):
+  azpim eligible --sort scope,role                                  # grouped by scope
+  azpim eligible --sort end --reverse                               # latest end time first`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		terms, err := eligibleSort.parse(eligibleOutput.Sort, "eligible")
+		if err != nil {
+			return err
+		}
 		cred, clients, err := connect()
 		if err != nil {
 			return err
@@ -50,6 +58,7 @@ Scope examples:
 			return err
 		}
 
+		eligibleSort.sort(assignments, terms, eligibleOutput.Reverse)
 		switch eligibleOutput.Format {
 		case "json":
 			return output.PrintEligibleJSON(os.Stdout, assignments)
@@ -65,4 +74,5 @@ Scope examples:
 func init() {
 	addScopeFlags(eligibleCmd, &eligibleScope)
 	addOutputFlags(eligibleCmd, &eligibleOutput)
+	addSortFlags(eligibleCmd, &eligibleOutput, eligibleSort)
 }

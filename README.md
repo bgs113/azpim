@@ -381,6 +381,24 @@ The scope flags don't read environment variables, so a subscription left in `AZU
 | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | `-o, --output table\|json` | Output format (default: `table`). On every command that lists or changes assignments                         |
 | `--human`                  | Human-readable TIME REMAINING (`1h 32m 5s` instead of `01:32:05`). `azpim active` only                        |
+| `--sort <keys>`            | Sort by these columns, comma-separated (or repeat `--sort`). Add `:desc` to sort a column descending. `eligible`, `active` and `requests` |
+| `--reverse`                | Reverse the sort order. `eligible`, `active` and `requests`                                                   |
+
+By default, `eligible` sorts by role then scope, `active` by role then resource, and `requests` newest first. `--sort` takes one or more column names, and each later column breaks ties left by the ones before it:
+
+| Command    | Sort keys                                                             |
+| ---------- | --------------------------------------------------------------------- |
+| `eligible` | `role`, `scope`, `type`, `membership`, `end`                          |
+| `active`   | `role`, `resource`, `type`, `membership`, `state`, `end`, `remaining` |
+| `requests` | `role`, `scope`, `type`, `status`, `requested`, `expires`             |
+
+```bash
+azpim active --sort remaining                 # expiring soonest first
+azpim eligible --sort scope,role              # grouped by scope, roles A–Z within each
+azpim requests --sort status,requested:desc   # by status, newest first within each
+```
+
+Keys ignore case and must be spelled out in full. Time columns sort by time, and rows without one (shown as `-`) go last in either direction. `--reverse` flips the whole order, the default order included. JSON output uses the same order as the table. Shell completion suggests the keys.
 
 Tables and JSON go to stdout; messages, prompts and the spinner go to stderr. When nothing is found, table output writes nothing to stdout and prints the message (e.g. `No active assignments found.`) on stderr, and `-o json` prints `[]`. Either way the exit status is 0, so a script can tell "none" from a failure without matching text.
 

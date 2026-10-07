@@ -41,8 +41,10 @@ var cloudName string
 
 // outputFlags holds output format flags.
 type outputFlags struct {
-	Format        string // "table" or "json"
-	HumanReadable bool   // --human for "1h 32m" style time remaining (active only)
+	Format        string   // "table" or "json"
+	HumanReadable bool     // --human for "1h 32m" style time remaining (active only)
+	Sort          []string // --sort keys, each optionally with :asc or :desc
+	Reverse       bool     // --reverse flips the sort order
 }
 
 var rootCmd = &cobra.Command{

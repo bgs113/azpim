@@ -30,8 +30,16 @@ current status. Use --pending to show only requests awaiting admin approval.
 Scope examples:
   azpim requests                                                    # whole tenant, one query
   azpim requests --pending                                          # only pending approval
-  azpim requests --subscription 00000000-0000-0000-0000-000000000000`,
+  azpim requests --subscription 00000000-0000-0000-0000-000000000000
+
+Sort examples (default: newest first):
+  azpim requests --sort status,requested:desc                       # by status, newest first within each
+  azpim requests --sort requested                                   # oldest first`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		terms, err := requestsSort.parse(requestsOutput.Sort, "requests")
+		if err != nil {
+			return err
+		}
 		cred, clients, err := connect()
 		if err != nil {
 			return err
@@ -53,6 +61,7 @@ Scope examples:
 			return err
 		}
 
+		requestsSort.sort(requests, terms, requestsOutput.Reverse)
 		switch requestsOutput.Format {
 		case "json":
 			return output.PrintRequestsJSON(os.Stdout, requests, requestsPending)
@@ -68,5 +77,6 @@ Scope examples:
 func init() {
 	addScopeFlags(requestsCmd, &requestsScope)
 	addOutputFlags(requestsCmd, &requestsOutput)
+	addSortFlags(requestsCmd, &requestsOutput, requestsSort)
 	requestsCmd.Flags().BoolVar(&requestsPending, "pending", false, "Show only requests awaiting admin approval")
 }
