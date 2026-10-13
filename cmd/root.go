@@ -76,6 +76,10 @@ func Execute(version string) {
 		if errors.Is(err, errCancelled) {
 			os.Exit(130) // what the shell reports after Ctrl-C
 		}
+		if debug {
+			// friendlyError trims Azure's response; show all of it first.
+			fmt.Fprintln(os.Stderr, "[debug] full error:", err)
+		}
 		fmt.Fprintln(os.Stderr, "Error:", friendlyError(err))
 		os.Exit(1)
 	}
@@ -112,7 +116,12 @@ func friendlyError(err error) string {
 				break
 			}
 		}
-		return msg + ": " + armCodeDesc(respErr.ErrorCode, respErr.StatusCode)
+		msg += ": " + armCodeDesc(respErr.ErrorCode, respErr.StatusCode)
+		// Azure support asks for this ID to trace a failed call.
+		if id := correlationID(respErr); id != "" {
+			msg += " (correlation ID " + id + ")"
+		}
+		return msg
 	}
 
 	return msg
@@ -136,6 +145,19 @@ func outcomeLine(o pim.RequestOutcome, action, role, done string) string {
 		status = "none"
 	}
 	return fmt.Sprintf("%s request for %q submitted, but Azure did not confirm it took effect (status: %s). Check 'azpim requests' before relying on it.", action, role, status)
+}
+
+// correlationID returns the ID ARM gave the failed call: its correlation ID,
+// or failing that its request ID. It's "" when the response isn't available.
+func correlationID(respErr *azcore.ResponseError) string {
+	if respErr.RawResponse == nil {
+		return ""
+	}
+	h := respErr.RawResponse.Header
+	if id := h.Get("x-ms-correlation-request-id"); id != "" {
+		return id
+	}
+	return h.Get("x-ms-request-id")
 }
 
 // armCodeDesc maps known ARM error codes to short descriptions,
@@ -173,6 +195,13 @@ func init() {
 		cloudDefault = "public"
 	}
 	rootCmd.PersistentFlags().StringVar(&cloudName, "cloud", cloudDefault, `Azure cloud: "public", "usgov" or "china" (env AZURE_CLOUD)`)
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", os.Getenv("AZPIM_DEBUG") != "",
+		"Log Azure sign-in, HTTP requests, responses and retries to stderr (env AZPIM_DEBUG). The log includes tenant, subscription and principal IDs; check it before sharing")
+	rootCmd.PersistentPreRun = func(*cobra.Command, []string) {
+		if debug {
+			enableDebugLog(os.Stderr)
+		}
+	}
 	rootCmd.AddCommand(eligibleCmd)
 	rootCmd.AddCommand(activeCmd)
 	rootCmd.AddCommand(activateCmd)
@@ -450,10 +479,10 @@ var stderrIsTerminal = func() bool { return term.IsTerminal(os.Stderr.Fd()) }
 // spin runs fn, showing a spinner and title on stderr while it works. The
 // spinner is skipped, and fn simply run, unless stdin and stderr are both
 // terminals: it reads keys from stdin and draws on stderr. It's also skipped in
-// plain-prompt mode (screen readers) and on a dumb terminal. Ctrl-C returns
-// errCancelled.
+// plain-prompt mode (screen readers), on a dumb terminal and with --debug,
+// whose log lines would break up the spinner. Ctrl-C returns errCancelled.
 func spin(ctx context.Context, title string, fn func(context.Context) error) error {
-	if !stdinIsTerminal() || !stderrIsTerminal() || plainPrompts() || os.Getenv("TERM") == "dumb" {
+	if !stdinIsTerminal() || !stderrIsTerminal() || plainPrompts() || os.Getenv("TERM") == "dumb" || debug {
 		return fn(ctx)
 	}
 	var done atomic.Bool

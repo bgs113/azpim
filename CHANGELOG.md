@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `--debug` (or `AZPIM_DEBUG=1`) logs Azure sign-in steps, HTTP requests, responses and retries to stderr, with timings, and prints Azure's full error response when a command fails. The SDK redacts tokens and doesn't log bodies. See [Debugging](README.md#debugging).
+- Errors from Azure end with the call's correlation ID, which Microsoft support asks for.
+
 ## [1.3.0] - 2026-10-07
 
 ### Added

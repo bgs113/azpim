@@ -408,6 +408,14 @@ While azpim signs in, fetches assignments or reads a role's policy, a spinner sh
 
 Requests that only read from Azure (listing assignments and requests, reading role policies, looking up scopes, signing in) time out after 30 seconds per attempt and are retried up to 3 times, so one Azure never answers fails after about two minutes with `Azure didn't respond …` instead of hanging. Signing in through `az login` has its own 10-second limit. Requests that activate, extend or deactivate a role have no per-attempt timeout: resending one that had already gone through would fail as a duplicate. The spinner shows they're still working, and Ctrl-C cancels.
 
+### Debugging
+
+`--debug` (or `AZPIM_DEBUG=1`) logs what the Azure SDK does to stderr: each sign-in step, HTTP request and response, and retry, stamped with the seconds since azpim started. It shows where a slow command spends its time and why a sign-in fails. When a command fails, it also prints Azure's full error response before the usual one-line message. The spinner is off while debugging.
+
+The SDK redacts the `Authorization` header, headers it doesn't know and query parameter values, and doesn't log request or response bodies. The log still contains tenant, subscription and principal IDs and role and scope paths, so check it before you paste it into an issue.
+
+When Azure rejects a request, the error ends with its correlation ID, e.g. `(correlation ID 3f2c…)`. Give it to Microsoft support if you open a case about the failure.
+
 ---
 
 ### `azpim eligible` — List eligible assignments
