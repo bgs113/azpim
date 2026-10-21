@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- Build with Go 1.27.3 and bump the indirect `golang.org/x/net` dependency to v0.60.0, fixing standard library advisories in `crypto/x509`, `crypto/tls`, `net/http`, `net/textproto` and HTTP/2 ([GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809), [GO-2026-6613](https://pkg.go.dev/vuln/GO-2026-6613), [GO-2026-6608](https://pkg.go.dev/vuln/GO-2026-6608), [GO-2026-6607](https://pkg.go.dev/vuln/GO-2026-6607), [GO-2026-6605](https://pkg.go.dev/vuln/GO-2026-6605)) and HTTP/2 advisories shared with `golang.org/x/net` ([GO-2026-6617](https://pkg.go.dev/vuln/GO-2026-6617), [GO-2026-6612](https://pkg.go.dev/vuln/GO-2026-6612), [GO-2026-6611](https://pkg.go.dev/vuln/GO-2026-6611), [GO-2026-6610](https://pkg.go.dev/vuln/GO-2026-6610), [GO-2026-6603](https://pkg.go.dev/vuln/GO-2026-6603)). azpim reaches these through the Azure SDK's HTTP client.
+
 ## [1.3.0] - 2026-10-07
 
 ### Added
