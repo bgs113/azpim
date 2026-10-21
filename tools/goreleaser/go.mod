@@ -1,6 +1,6 @@
 module github.com/bgs113/azpim/tools/goreleaser
 
-go 1.27.1
+go 1.27.3
 
 tool github.com/goreleaser/goreleaser/v2
 
