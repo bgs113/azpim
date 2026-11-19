@@ -19,7 +19,5 @@ Thumbs.db
 /.mise.local.toml
 
 # local AI tooling (not published)
-/CLAUDE.md
-/AGENTS.md
 /.claude/
 /graphify-out/
