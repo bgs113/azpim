@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-19
+
+### Changed
+- Bump `github.com/Azure/azure-sdk-for-go/sdk/azcore` to v1.24.0, `github.com/Azure/azure-sdk-for-go/sdk/azidentity` to v1.15.0 and `charm.land/bubbletea/v2` to v2.1.1.
+
 ### Security
+- Bump the indirect `golang.org/x/net` dependency to v0.62.0, fixing two HTML parser advisories ([GO-2026-6866](https://pkg.go.dev/vuln/GO-2026-6866), [GO-2026-6860](https://pkg.go.dev/vuln/GO-2026-6860)). azpim doesn't parse HTML, so neither was reachable.
 - Build with Go 1.27.4, fixing a `net/http` race that can crash HTTP/1 servers using `MaxBytesReader` ([GO-2026-6859](https://pkg.go.dev/vuln/GO-2026-6859)) and toolchain advisories in `cmd/go`, `cmd/cgo`, `cmd/compile` and `cmd/link` that let cgo flags, directives or `.syso` files run code or inject linker flags at build time ([GO-2026-6848](https://pkg.go.dev/vuln/GO-2026-6848), [GO-2026-6849](https://pkg.go.dev/vuln/GO-2026-6849), [GO-2026-6850](https://pkg.go.dev/vuln/GO-2026-6850), [GO-2026-6851](https://pkg.go.dev/vuln/GO-2026-6851), [GO-2026-6852](https://pkg.go.dev/vuln/GO-2026-6852), [GO-2026-6853](https://pkg.go.dev/vuln/GO-2026-6853), [GO-2026-6854](https://pkg.go.dev/vuln/GO-2026-6854), [GO-2026-6855](https://pkg.go.dev/vuln/GO-2026-6855), [GO-2026-6856](https://pkg.go.dev/vuln/GO-2026-6856), [GO-2026-6857](https://pkg.go.dev/vuln/GO-2026-6857), [GO-2026-6858](https://pkg.go.dev/vuln/GO-2026-6858)). azpim runs no HTTP server and has no cgo dependencies, so neither was exploitable in practice; the bump clears vulnerability scanners and hardens release builds.
 - Build with Go 1.27.3 and bump the indirect `golang.org/x/net` dependency to v0.60.0, fixing standard library advisories in `crypto/x509`, `crypto/tls`, `net/http`, `net/textproto` and HTTP/2 ([GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809), [GO-2026-6613](https://pkg.go.dev/vuln/GO-2026-6613), [GO-2026-6608](https://pkg.go.dev/vuln/GO-2026-6608), [GO-2026-6607](https://pkg.go.dev/vuln/GO-2026-6607), [GO-2026-6605](https://pkg.go.dev/vuln/GO-2026-6605)) and HTTP/2 advisories shared with `golang.org/x/net` ([GO-2026-6617](https://pkg.go.dev/vuln/GO-2026-6617), [GO-2026-6612](https://pkg.go.dev/vuln/GO-2026-6612), [GO-2026-6611](https://pkg.go.dev/vuln/GO-2026-6611), [GO-2026-6610](https://pkg.go.dev/vuln/GO-2026-6610), [GO-2026-6603](https://pkg.go.dev/vuln/GO-2026-6603)). azpim reaches these through the Azure SDK's HTTP client.
 
@@ -153,7 +159,8 @@ First public release.
 - Sign release binaries and container images with Cosign; publish SBOMs.
 - Add MIT license.
 
-[Unreleased]: https://github.com/bgs113/azpim/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/bgs113/azpim/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/bgs113/azpim/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/bgs113/azpim/compare/v1.2.3...v1.3.0
 [1.2.3]: https://github.com/bgs113/azpim/compare/v1.2.2...v1.2.3
 [1.2.2]: https://github.com/bgs113/azpim/compare/v1.2.1...v1.2.2
