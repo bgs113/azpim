@@ -21,7 +21,9 @@ kos:
   # Needs GoReleaser >= v2.18.0 (built with Go 1.27). Older versions fail with
   # `ko: azpim does not contain a valid local import path () for directory (.)`,
   # which is why image publishing was paused from v1.0.1 to v1.1.0 (#11).
-  - base_image: cgr.dev/chainguard/static:latest
+  - repositories:
+      - ghcr.io/bgs113/azpim
+    base_image: cgr.dev/chainguard/static:latest
     bare: true
     tags:
       - "{{.Version}}"
