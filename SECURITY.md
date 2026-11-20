@@ -13,7 +13,7 @@ Only the latest release receives security fixes.
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report vulnerabilities using [GitHub's private security advisory feature](../../security/advisories/new). This keeps the details confidential until a fix is available.
+Report vulnerabilities using [GitHub's private security advisory feature](https://github.com/bgs113/azpim/security/advisories/new). This keeps the details confidential until a fix is available.
 
 Include as much of the following as possible:
 

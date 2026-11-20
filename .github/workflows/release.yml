@@ -81,7 +81,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GORELEASER_CURRENT_TAG: ${{ env.TAG }}
-          KO_DOCKER_REPO: ghcr.io/bgs113/azpim
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
 
       # SLSA build provenance (https://goreleaser.com/customization/publish/attestations/),

@@ -11,6 +11,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `--debug` (or `AZPIM_DEBUG=1`) logs Azure sign-in steps, HTTP requests, responses and retries to stderr, with timings, and prints Azure's full error response when a command fails. The SDK redacts tokens and doesn't log bodies. See [Debugging](README.md#debugging).
 - Errors from Azure end with the call's correlation ID, which Microsoft support asks for.
 
+### Security
+- Bump the indirect `golang.org/x/crypto` dependency to v0.59.0, which moves the deprecated `openpgp` packages out of the module ([GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932)). azpim never imported them, so it wasn't affected.
+
 ## [1.3.1] - 2026-11-19
 
 ### Changed

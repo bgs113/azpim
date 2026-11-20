@@ -3,6 +3,7 @@
 [![CI](https://github.com/bgs113/azpim/actions/workflows/ci.yml/badge.svg)](https://github.com/bgs113/azpim/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/bgs113/azpim/actions/workflows/codeql.yml/badge.svg)](https://github.com/bgs113/azpim/actions/workflows/codeql.yml)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14199/baseline)](https://www.bestpractices.dev/projects/14199)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/bgs113/azpim/badge)](https://scorecard.dev/viewer/?uri=github.com/bgs113/azpim)
 
 A CLI tool for managing Azure Privileged Identity Management (PIM) role assignments for Azure Resources (RBAC). List eligible and active assignments, activate roles (now or at a scheduled time) with interactive prompts, extend and deactivate them, and track your requests — all from the terminal. Check a request with `--dry-run` or `--validate-only` before sending it. Works in Azure public cloud, Azure US Government and Azure China.
 

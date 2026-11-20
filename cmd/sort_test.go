@@ -171,3 +171,25 @@ func TestSortValidatedBeforeAzure(t *testing.T) {
 		}
 	}
 }
+
+// FuzzSortParse feeds arbitrary --sort values to the parser. It must not panic,
+// and anything it accepts must be keys of the spec, each used once.
+func FuzzSortParse(f *testing.F) {
+	for _, seed := range []string{"role", " Role ,end:DESC", "remainin", "role:", "", "role,role", "rôle:désc"} {
+		f.Add(seed)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		terms, err := activeSort.parse(strings.Split(s, ","), "active")
+		if err != nil {
+			return
+		}
+		names := activeSort.names()
+		seen := map[string]bool{}
+		for _, term := range terms {
+			if !slices.Contains(names, term.key) || seen[term.key] {
+				t.Fatalf("parse(%q) accepted %v", s, terms)
+			}
+			seen[term.key] = true
+		}
+	})
+}
